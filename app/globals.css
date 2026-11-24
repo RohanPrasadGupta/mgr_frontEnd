@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --fg: #14161a;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-fg: #ffffff;
+  --income: #15803d;
+  --expense: #dc2626;
+  --warn: #d97706;
+  --ring: rgba(37, 99, 235, 0.35);
+}
+/* Theme: follows the system unless the user picked one in Settings (data-theme on <html>). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1013;
+    --card: #181b21;
+    --fg: #eceef2;
+    --muted: #9aa3b2;
+    --border: #272c35;
+    --primary: #64a3ff;
+    --primary-fg: #0b1220;
+    --income: #4ade80;
+    --expense: #f87171;
+    --warn: #fbbf24;
+    --ring: rgba(100, 163, 255, 0.4);
+  }
+}
+:root[data-theme="dark"] {
+    --bg: #0e1013;
+    --card: #181b21;
+    --fg: #eceef2;
+    --muted: #9aa3b2;
+    --border: #272c35;
+    --primary: #64a3ff;
+    --primary-fg: #0b1220;
+    --income: #4ade80;
+    --expense: #f87171;
+    --warn: #fbbf24;
+    --ring: rgba(100, 163, 255, 0.4);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
