@@ -11,6 +11,7 @@ import { TransactionRow } from "./transaction-row";
 import { Button, Card, Empty, Skeleton, cx } from "./ui";
 import { useCountUp } from "@/lib/use-count-up";
 import { Widget } from "./widget";
+import { GetStarted } from "./get-started";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const PALETTE = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
@@ -58,6 +59,8 @@ export function Dashboard() {
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => { setTouched(true); setYm({ year, month }); }} />
       </div>
+
+      <GetStarted />
 
       {summary.error && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-expense/40 bg-expense/10 p-3 text-sm text-expense">

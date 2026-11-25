@@ -126,3 +126,7 @@ export const useFxQuote = (from?: string, to?: string, date?: string) =>
       return (await call(Promise.resolve(res))).data;
     },
   });
+
+/** Portfolio value and invested amount at each month end (replayed from trades + manual prices, base currency). */
+export const usePortfolioHistory = (months: number) =>
+  useQuery({ ...keep, queryKey: ["investments", "history", { months }] as const, staleTime: 60_000, queryFn: async () => (await call(client.GET("/investments/portfolio/history", { params: { query: { months } } }))).data });

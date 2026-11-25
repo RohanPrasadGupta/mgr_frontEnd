@@ -10,8 +10,9 @@ export function Wordmark({ height = 28, className, priority }: { height?: number
   const width = Math.round(height * WORDMARK_RATIO);
   return (
     <span className={cx("inline-flex shrink-0", className)} role="img" aria-label="MoneyMgr">
-      <Image src="/brand/wordmark-on-dark.png" alt="" aria-hidden width={width} height={height} priority={priority} className="logo-on-dark" style={{ height, width: "auto" }} />
-      <Image src="/brand/wordmark-on-light.png" alt="" aria-hidden width={width} height={height} priority={priority} className="logo-on-light" style={{ height, width: "auto" }} />
+      {/* the theme class sits on a wrapper: a display:none <img> reads as "resized" to Next's image checks */}
+      <span className="logo-on-dark"><Image src="/brand/wordmark-on-dark.png" alt="" aria-hidden width={width} height={height} priority={priority} style={{ height, width: "auto" }} /></span>
+      <span className="logo-on-light"><Image src="/brand/wordmark-on-light.png" alt="" aria-hidden width={width} height={height} priority={priority} style={{ height, width: "auto" }} /></span>
     </span>
   );
 }

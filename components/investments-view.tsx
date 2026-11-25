@@ -7,6 +7,7 @@ import type { AssetClass, Body, CostMethod, Holding } from "@/lib/api/types";
 import { CLASS_DOT, CLASS_LABEL, defaultTracking } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, PageSkeleton, Select, cx } from "./ui";
+import { PortfolioChart } from "./portfolio-chart";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 
@@ -43,6 +44,8 @@ export function InvestmentsView() {
               Not included in the totals: {p!.excluded.map((e) => `${e.symbol} (${e.reason})`).join(", ")}.
             </div>
           )}
+
+          {p!.holdings.length > 0 && <PortfolioChart />}
 
           {p!.holdings.length === 0 ? (
             <Empty>No investments yet. Add an asset (a stock, crypto, a SIP or pension fund…) then record trades or contributions.</Empty>
