@@ -71,7 +71,7 @@ export function GroupedBarChart({ labels, series, format, axis, ariaLabel, heigh
               {series.map((s, j) => {
                 const h = Math.max(0, (s.values[i]! / max) * plotH);
                 const x = cx0 - (bw * series.length) / 2 + j * bw;
-                return <rect key={s.name} x={x} y={M.top + plotH - h} width={bw - 1} height={h} rx={2} className={cx(s.className, active !== null && active !== i && "opacity-40")} />;
+                return <rect key={s.name} x={x} y={M.top + plotH - h} width={bw - 1} height={h} rx={2} style={{ animationDelay: `${Math.min(i, 24) * 18}ms` }} className={cx("chart-bar", s.className, active !== null && active !== i && "opacity-40")} />;
               })}
               {i % every === 0 && <text x={cx0} y={height - 6} textAnchor="middle" className={Y_LABEL}>{l}</text>}
               <rect x={M.left + group * i} y={M.top} width={group} height={plotH} fill="transparent" tabIndex={0} aria-label={`${l}: ${series.map((s) => `${s.name} ${format(s.values[i]!)}`).join(", ")}`}
@@ -105,7 +105,8 @@ export function LineChart({ labels, series, format, axis, ariaLabel, height = 22
         ))}
         {series.map((s) => {
           const pts = s.values.map((v, i) => [x(i), y(v)] as [number, number]);
-          return <g key={s.name}>{s.stroke === "area" && <path d={areaPath(pts, y(0))} className={cx(s.className.replace("stroke-", "fill-"), "opacity-15")} />}<path d={linePath(pts)} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className={s.className} /></g>;
+          // keyed by the values so a new month/year redraws the line instead of snapping
+          return <g key={`${s.name}:${s.values.join(",")}`}>{s.stroke === "area" && <path d={areaPath(pts, y(0))} className={cx("chart-area", s.className.replace("stroke-", "fill-"), "opacity-15")} />}<path d={linePath(pts)} pathLength={1} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className={cx("chart-line", s.className)} /></g>;
         })}
         {active !== null && <line x1={x(active)} x2={x(active)} y1={M.top} y2={M.top + plotH} className="stroke-muted" strokeDasharray="3 3" />}
         {active !== null && series.map((s) => <circle key={s.name} cx={x(active)} cy={y(s.values[active]!)} r={4} className={cx(s.className.replace("stroke-", "fill-"), "stroke-card")} strokeWidth={2} />)}
@@ -145,7 +146,7 @@ export function DailyBars({ days, today, format, axis, ariaLabel, height = 200 }
           const h = (d.value / max) * plotH;
           return (
             <g key={d.date}>
-              <rect x={cx0 - bw / 2} y={M.top + plotH - h} width={bw} height={h} rx={Math.min(2, bw / 2)} className={cx(d.date === today ? "fill-primary" : "fill-expense", active !== null && active !== i && "opacity-40")} />
+              <rect x={cx0 - bw / 2} y={M.top + plotH - h} width={bw} height={h} rx={Math.min(2, bw / 2)} style={{ animationDelay: `${Math.min(i, 31) * 12}ms` }} className={cx("chart-bar", d.date === today ? "fill-primary" : "fill-expense", active !== null && active !== i && "opacity-40")} />
               {i % every === 0 && <text x={cx0} y={height - 6} textAnchor="middle" className={Y_LABEL}>{Number(d.date.slice(8))}</text>}
               <rect x={M.left + slot * i} y={M.top} width={slot} height={plotH} fill="transparent" tabIndex={0} aria-label={`${d.date}: ${format(d.value)}`} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} onFocus={() => setActive(i)} onBlur={() => setActive(null)} className="outline-none" />
             </g>
@@ -165,13 +166,15 @@ export function DonutChart({ slices, centerLabel, centerValue, format, ariaLabel
   let offset = 25; // start at 12 o'clock
   const a = active !== null ? slices[active]! : null;
   return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center" onPointerLeave={() => setActive(null)}>
+    // Layout follows the card's own width (container query), not the viewport: a narrow column stacks the legend under the ring.
+    <div className="@container w-full" onPointerLeave={() => setActive(null)}>
+    <div className="flex flex-col items-center gap-4 @sm:flex-row @sm:items-center">
       <div className="relative size-40 shrink-0">
         <svg viewBox="0 0 42 42" className="size-full -rotate-0" role="img" aria-label={ariaLabel}>
           <circle cx="21" cy="21" r={R} fill="none" className="stroke-border" strokeWidth={5} />
           {slices.map((s, i) => {
             const dash = Math.max(0.0001, s.pct - (slices.length > 1 ? 0.6 : 0)); // small gap between slices
-            const el = <circle key={s.label} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="transition-[stroke-width]" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
+            const el = <circle key={s.label} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="chart-slice" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
             offset -= s.pct;
             return el;
           })}
@@ -192,6 +195,7 @@ export function DonutChart({ slices, centerLabel, centerValue, format, ariaLabel
         ))}
       </ul>
     </div>
+    </div>
   );
 }
 
@@ -206,7 +210,7 @@ export function Gauge({ pct, label, band }: { pct: number | null; label: string;
     <div className="mx-auto w-full max-w-[16rem]">
       <svg viewBox="0 0 100 58" className="w-full" role="img" aria-label={pct === null ? "Savings rate: no income" : `Savings rate ${pct.toFixed(1)}%, ${label}`}>
         <path d={`M${sx} ${sy} A${R} ${R} 0 0 1 ${ex} ${ey}`} fill="none" className="stroke-border" strokeWidth={9} strokeLinecap="round" />
-        {pct !== null && pct > 0 && <path d={`M${sx} ${sy} A${R} ${R} 0 ${angle > 180 ? 1 : 0} 1 ${vx} ${vy}`} fill="none" style={{ stroke: color }} strokeWidth={9} strokeLinecap="round" />}
+        {pct !== null && pct > 0 && <path key={angle} d={`M${sx} ${sy} A${R} ${R} 0 ${angle > 180 ? 1 : 0} 1 ${vx} ${vy}`} pathLength={1} className="chart-line" fill="none" style={{ stroke: color }} strokeWidth={9} strokeLinecap="round" />}
         <line x1={t1x} y1={t1y} x2={t2x} y2={t2y} className="stroke-muted" strokeWidth={1.2} />
         <text x={C} y={C - 4} textAnchor="middle" className="fill-fg text-[14px] font-semibold">{pct === null ? "—" : `${pct.toFixed(0)}%`}</text>
         <text x={C} y={C + 6} textAnchor="middle" className="fill-muted text-[5px]">{label}</text>

@@ -40,8 +40,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           <Field label="Email"><Input name="email" type="email" required autoComplete="email" /></Field>
           <Field label="Password" hint={register ? "At least 8 characters" : undefined}><Input name="password" type="password" required minLength={register ? 8 : 1} autoComplete={register ? "new-password" : "current-password"} /></Field>
           {register && <Field label="Base currency" hint="All totals are shown in this currency"><Input name="baseCurrency" defaultValue="THB" maxLength={3} required className="uppercase" /></Field>}
+          {!register && <div className="-mt-1 text-right"><Link href="/forgot-password" className="text-xs text-primary underline">Forgot password?</Link></div>}
           {error && <p role="alert" className="text-sm text-expense">{error}</p>}
-          <Button type="submit" disabled={busy} className="w-full">{busy ? "Please wait…" : register ? "Create account" : "Sign in"}</Button>
+          <Button type="submit" loading={busy} className="w-full">{busy ? "Please wait…" : register ? "Create account" : "Sign in"}</Button>
         </form>
         <p className="text-center text-sm text-muted">
           {register ? "Have an account? " : "New here? "}

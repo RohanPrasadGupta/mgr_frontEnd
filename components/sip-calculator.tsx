@@ -66,8 +66,8 @@ function Bars({ rows, money }: { rows: SipResult["yearlyBreakdown"]; money: (v: 
         return (
           <g key={r.year}>
             <title>{`Year ${r.year}: invested ${money(r.invested)}, returns ${money(r.returns)}, total ${money(r.total)}`}</title>
-            <rect x={x - bw / 2} y={base - hi} width={bw} height={hi} className="fill-primary" />
-            <rect x={x - bw / 2} y={base - hi - hr} width={bw} height={hr} rx={2} className="fill-income" />
+            <rect x={x - bw / 2} y={base - hi} width={bw} height={hi} className="chart-bar fill-primary" />
+            <rect x={x - bw / 2} y={base - hi - hr} width={bw} height={hr} rx={2} className="chart-bar fill-income" />
             {(rows.length <= 12 || i % 2 === 0) && <text x={x} y={H - 8} textAnchor="middle" className="fill-muted text-[11px]">{r.year}</text>}
           </g>
         );

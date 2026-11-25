@@ -25,17 +25,17 @@ export function Widget({ title, action, className, children, state }: {
   action?: ReactNode;
   className?: string;
   children: ReactNode;
-  state?: { isPending: boolean; error: unknown; refetch: () => unknown };
+  state?: { isPending: boolean; error: unknown; refetch: () => unknown; isPlaceholderData?: boolean };
 }) {
   return (
-    <Card className={cx("min-w-0", className)}>
+    <Card className={cx("anim-rise min-w-0", className)} aria-busy={state?.isPlaceholderData || undefined}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {action}
       </div>
       <Boundary title={title}>
         {state?.error ? <ErrorNote error={state.error instanceof ApiError || state.error instanceof Error ? state.error : new Error("Failed to load")} retry={() => state.refetch()} />
-          : state?.isPending ? <Skeleton className="h-40" /> : children}
+          : state?.isPending ? <Skeleton className="h-40" /> : <div className={cx("transition-opacity", state?.isPlaceholderData && "refreshing")}>{children}</div>}
       </Boundary>
     </Card>
   );

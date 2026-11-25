@@ -4,6 +4,7 @@ import { call, client } from "@/lib/api/client";
 import type { Body } from "@/lib/api/types";
 import { qk, useCurrencies, useMe, useMutate } from "@/lib/api/hooks";
 import { DeleteAccountCard } from "./delete-account";
+import { ChangePasswordCard } from "./change-password";
 import { Button, Card, ErrorNote, Field, Input, Segmented, Select, Skeleton } from "./ui";
 import { useConfirm } from "./feedback";
 
@@ -79,9 +80,11 @@ export function SettingsView() {
           <Field label="Week starts on"><Select value={weekStart} onChange={(e) => setWeekStart(Number(e.target.value))}>{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</Select></Field>
           {err && <ErrorNote error={new Error(err)} />}
           {msg && <p role="status" className="text-sm text-income">{msg}</p>}
-          <Button type="submit" disabled={!dirty || save.isPending}>{save.isPending ? "Saving…" : "Save changes"}</Button>
+          <Button type="submit" disabled={!dirty} loading={save.isPending}>{save.isPending ? "Saving…" : "Save changes"}</Button>
         </form>
       </Card>
+
+      <ChangePasswordCard />
 
       <DeleteAccountCard />
     </div>

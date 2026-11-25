@@ -20,14 +20,15 @@ export function mockFetch(routes: Record<string, Handler | unknown>) {
     const isReq = typeof Request !== "undefined" && input instanceof Request;
     const url = new URL(isReq ? input.url : String(input), "http://localhost");
     const method = (isReq ? input.method : (init?.method ?? "GET")).toUpperCase();
-    const text = isReq ? await input.clone().text() : init?.body ? String(init.body) : "";
+    const isForm = !isReq && typeof FormData !== "undefined" && init?.body instanceof FormData;
+    const text = isReq ? await input.clone().text() : init?.body && !isForm ? String(init.body) : "";
     const path = url.pathname.replace(/^\/api\/v1/, "");
-    const body = text ? JSON.parse(text) : undefined;
+    const body = isForm ? init!.body : text ? JSON.parse(text) : undefined; // FormData (uploads) is handed over as-is
     calls.push({ method, path, body, url: url.pathname + url.search });
     const key = `${method} ${path}`;
     if (!(key in routes)) throw new Error(`Unhandled fetch: ${key}`);
     const h = routes[key];
-    const out = typeof h === "function" ? (h as Handler)({ url, body, method }) : h;
+    const out = await (typeof h === "function" ? (h as Handler)({ url, body, method }) : h); // handlers may be async (to hold a response back)
     if (out instanceof Response) return out;
     if (out === null) return new Response(null, { status: 204 });
     return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });

@@ -6,7 +6,7 @@ import { invalidateInvestments, useCurrencies, useMe, useMutate, usePortfolio } 
 import type { AssetClass, Body, CostMethod, Holding } from "@/lib/api/types";
 import { CLASS_DOT, CLASS_LABEL, defaultTracking } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty } from "@/lib/money";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, Modal, PageSkeleton, Select, cx } from "./ui";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 
@@ -26,7 +26,7 @@ export function InvestmentsView() {
         </div>
       </div>
 
-      {portfolio.isPending ? <Skeleton className="h-64" /> : portfolio.error ? <ErrorNote error={portfolio.error} retry={() => portfolio.refetch()} /> : (
+      {portfolio.isPending ? <PageSkeleton /> : portfolio.error ? <ErrorNote error={portfolio.error} retry={() => portfolio.refetch()} /> : (
         <>
           <section aria-label="Portfolio summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat label="Portfolio value" value={formatMoney(p!.marketValueMinor, base)} />
@@ -49,17 +49,17 @@ export function InvestmentsView() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
               <Card className="overflow-hidden p-0">
-                <ul className="divide-y divide-border">
+                <ul className="stagger divide-y divide-border">
                   {p!.holdings.map((h) => <HoldingRow key={h.asset.id} h={h} />)}
                 </ul>
               </Card>
               <Card>
                 <h2 className="mb-3 text-sm font-semibold">Allocation</h2>
-                <ul className="space-y-2.5">
+                <ul className="stagger space-y-2.5">
                   {p!.allocation.map((a) => (
                     <li key={a.class}>
                       <div className="flex justify-between text-sm"><span className="flex items-center gap-2"><span className={cx("size-2.5 rounded-full", CLASS_DOT[a.class])} />{CLASS_LABEL[a.class]}</span><span className="tabular-nums text-muted">{a.pct.toFixed(0)}%</span></div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", CLASS_DOT[a.class])} style={{ width: `${Math.max(2, a.pct)}%` }} /></div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("bar-fill h-full rounded-full", CLASS_DOT[a.class])} style={{ width: `${Math.max(2, a.pct)}%` }} /></div>
                       <div className="mt-0.5 text-xs tabular-nums text-muted">{formatMoney(a.valueMinor, base)}</div>
                     </li>
                   ))}
@@ -146,7 +146,7 @@ export function AssetDialog({ open, onClose }: { open: boolean; onClose: () => v
             </Field>
           ) : <p className="text-xs text-muted">Tracked by value: you record contributions and withdrawals, and update the current total value yourself.</p>}
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={create.isPending}>Add</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={create.isPending}>Add</Button></div>
         </form>
       )}
     </Modal>

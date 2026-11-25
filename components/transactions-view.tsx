@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { invalidateLedger, useAccounts, useCategories, useMe, useMutate, useTransactions } from "@/lib/api/hooks";
+import { invalidateLedger, useAccounts, useCategories, useMe, useMutate, useTags, useTransactions } from "@/lib/api/hooks";
 import type { Transaction } from "@/lib/api/types";
 import { formatMoney, monthRange } from "@/lib/money";
 import { toast } from "@/lib/toast";
@@ -9,7 +9,7 @@ import { useConfirm } from "./feedback";
 import { MonthPicker } from "./month-picker";
 import { TransactionForm } from "./transaction-form";
 import { TransactionRow } from "./transaction-row";
-import { Button, Card, Empty, ErrorNote, Input, Segmented, Select, Skeleton } from "./ui";
+import { Button, Card, Empty, ErrorNote, Input, ListSkeleton, Segmented, Select, cx } from "./ui";
 
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -18,6 +18,7 @@ export function TransactionsView() {
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [kind, setKind] = useState<"" | "income" | "expense">("");
   const [accountId, setAccountId] = useState("");
+  const [tagId, setTagId] = useState("");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -36,7 +37,8 @@ export function TransactionsView() {
   const { data: me } = useMe();
   const accounts = useAccounts();
   const categories = useCategories();
-  const list = useTransactions({ from, to, kind, accountId, q });
+  const tags = useTags();
+  const list = useTransactions({ from, to, kind, accountId, q, tagId });
   const base = me?.baseCurrency ?? "THB";
 
   const txs = useMemo(() => list.data?.pages.flatMap((p) => p.data) ?? [], [list.data]);
@@ -66,25 +68,31 @@ export function TransactionsView() {
           <option value="">All accounts</option>
           {accounts.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </Select>
+        {(tags.data?.length ?? 0) > 0 && (
+          <Select value={tagId} onChange={(e) => setTagId(e.target.value)} className="w-auto" aria-label="Tag">
+            <option value="">All tags</option>
+            {tags.data!.map((t) => <option key={t.id} value={t.id}>#{t.name}</option>)}
+          </Select>
+        )}
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search note or category" aria-label="Search" className="min-w-48 flex-1" />
       </div>
 
-      {list.isPending ? <Skeleton className="h-64" /> : list.error ? <ErrorNote error={list.error} retry={() => list.refetch()} /> : days.length === 0 ? (
-        <Empty>{q || kind || accountId ? "No transactions match these filters." : "No transactions this month."}</Empty>
+      {list.isPending ? <ListSkeleton rows={8} /> : list.error ? <ErrorNote error={list.error} retry={() => list.refetch()} /> : days.length === 0 ? (
+        <Empty>{q || kind || accountId || tagId ? "No transactions match these filters." : "No transactions this month."}</Empty>
       ) : (
-        <div className="space-y-3">
+        <div className={cx("space-y-3 transition-opacity", list.isPlaceholderData && "refreshing")} aria-busy={list.isPlaceholderData || undefined}>
           {days.map((d) => (
-            <Card key={d.day} className="p-3">
+            <Card key={d.day} className="anim-rise p-3">
               <div className="mb-1 flex items-center justify-between px-2 text-xs text-muted">
                 <span className="font-medium">{dayLabel(d.day)}</span>
                 <span className="tabular-nums">{d.income > 0 && <span className="text-income">+{formatMoney(d.income, base)} </span>}{d.expense > 0 && <span className="text-expense">−{formatMoney(d.expense, base)}</span>}</span>
               </div>
-              <ul className="divide-y divide-border">
-                {d.items.map((t) => <TransactionRow key={t.id} tx={t} categories={categories.data} accounts={accounts.data} baseCurrency={base} onEdit={() => setEditing(t)} onDelete={() => void remove(t)} busy={del.isPending} />)}
+              <ul className="stagger divide-y divide-border">
+                {d.items.map((t) => <TransactionRow key={t.id} tx={t} categories={categories.data} accounts={accounts.data} tags={tags.data} baseCurrency={base} onEdit={() => setEditing(t)} onDelete={() => void remove(t)} busy={del.isPending && del.variables?.id === t.id} />)}
               </ul>
             </Card>
           ))}
-          {list.hasNextPage && <div className="text-center"><Button variant="ghost" disabled={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>{list.isFetchingNextPage ? "Loading…" : "Load more"}</Button></div>}
+          {list.hasNextPage && <div className="text-center"><Button variant="ghost" loading={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>{list.isFetchingNextPage ? "Loading…" : "Load more"}</Button></div>}
         </div>
       )}
 

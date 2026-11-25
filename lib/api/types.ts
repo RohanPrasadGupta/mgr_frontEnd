@@ -23,6 +23,15 @@ export type Portfolio = S["Portfolio"];
 export type Trade = S["Trade"];
 export type PricePoint = S["PricePoint"];
 export type SipResult = S["SipResult"];
+export type Tag = S["Tag"];
+export type Attachment = S["Attachment"];
+export type Goal = S["Goal"];
+export type GoalContribution = S["GoalContribution"];
+export type Debt = S["Debt"];
+export type DebtPayment = S["DebtPayment"];
+export type DebtSummary = S["DebtSummary"];
+export type Note = S["Note"];
+export type Report = S["Report"];
 
 export type AccountType = Account["type"];
 export type TxKind = Transaction["kind"];

@@ -121,3 +121,50 @@ describe("TransactionForm — edit", () => {
 });
 
 it("fixture sanity: base currency is THB and four accounts exist", () => { expect(me.baseCurrency).toBe("THB"); expect(accounts).toHaveLength(4); });
+
+describe("TransactionForm — tags & receipts", () => {
+  const tag = (id: string, name: string) => ({ id, userId: "u1", name, color: null, createdAt: "2025-01-01T00:00:00.000Z", usageCount: 0 });
+  it("sends selected tags, creates a new tag inline, and uploads picked receipts after the transaction is saved", async () => {
+    const m = mockFetch(routes({
+      "GET /tags": { data: [tag("g1", "trip"), tag("g2", "work")] },
+      "POST /tags": { data: tag("g3", "food-court") },
+      "POST /transactions/t1/attachments": { data: { id: "a1", transactionId: "t1", fileName: "r.png", contentType: "image/png", sizeBytes: 4, createdAt: "2025-01-01T00:00:00.000Z" } },
+    }));
+    const onClose = vi.fn();
+    await open(<TransactionForm open onClose={onClose} />);
+    await userEvent.type(screen.getByLabelText(/^Amount/), "10");
+    await userEvent.click(await screen.findByRole("button", { name: "#trip" }));
+    expect(screen.getByRole("button", { name: "#trip" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.type(screen.getByLabelText("New tag"), "food-court{Enter}");
+    await waitFor(() => expect(m.last("POST", "/tags")!.body).toEqual({ name: "food-court" }));
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "r.png", { type: "image/png" });
+    await userEvent.upload(screen.getByLabelText("Attach files"), file);
+    expect(screen.getByText("r.png")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(m.last("POST", "/transactions")!.body.tagIds).toEqual(["g1", "g3"]);
+    const up = m.last("POST", "/transactions/t1/attachments")!;
+    expect((up.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("rejects files that are too big or of the wrong type before uploading", async () => {
+    mockFetch(routes());
+    await open(<TransactionForm open onClose={vi.fn()} />);
+    const big = new File([new Uint8Array(11 * 1024 * 1024)], "huge.pdf", { type: "application/pdf" });
+    await userEvent.upload(screen.getByLabelText("Attach files"), big);
+    expect(screen.queryByText("huge.pdf")).not.toBeInTheDocument();
+  });
+
+  it("in edit mode lists existing attachments with links and patches the tag set", async () => {
+    const m = mockFetch(routes({
+      "GET /tags": { data: [tag("g1", "trip")] },
+      "GET /transactions/t9/attachments": { data: [{ id: "a1", transactionId: "t9", fileName: "bill.pdf", contentType: "application/pdf", sizeBytes: 2048, createdAt: "2025-01-01T00:00:00.000Z" }] },
+      "PATCH /transactions/t9": { data: {} },
+    }));
+    await open(<TransactionForm open tx={tx({ tagIds: ["g1"], attachmentCount: 1 })} onClose={vi.fn()} />, categoriesLoaded);
+    expect(await screen.findByRole("link", { name: /bill\.pdf/ })).toHaveAttribute("href", "/api/v1/attachments/a1/file");
+    await userEvent.click(await screen.findByRole("button", { name: "#trip" })); // deselect
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/transactions/t9")!.body.tagIds).toEqual([]));
+  });
+});

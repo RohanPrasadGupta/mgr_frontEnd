@@ -9,6 +9,7 @@ import { DailyBars, DonutChart, Gauge, GroupedBarChart, LineChart } from "./char
 import { MonthPicker } from "./month-picker";
 import { TransactionRow } from "./transaction-row";
 import { Button, Card, Empty, Skeleton, cx } from "./ui";
+import { useCountUp } from "@/lib/use-count-up";
 import { Widget } from "./widget";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -65,10 +66,10 @@ export function Dashboard() {
           <Button variant="ghost" onClick={() => void qc.invalidateQueries()}>Retry everything</Button>
         </div>
       )}
-      <section aria-label="Summary" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Kpi label="Income" failed={!!summary.error} value={s && fmt(s.incomeMinor)} tone="income" now={s?.incomeMinor} before={prevSummary.data?.incomeMinor} goodWhenUp />
-        <Kpi label="Expense" failed={!!summary.error} value={s && fmt(s.expenseMinor)} tone="expense" now={s?.expenseMinor} before={prevSummary.data?.expenseMinor} goodWhenUp={false} />
-        <Kpi label="Net" failed={!!summary.error} value={s && formatMoney(s.netMinor, cur, { sign: true })} tone={s && s.netMinor < 0 ? "expense" : "income"} now={s?.netMinor} before={prevSummary.data?.netMinor} goodWhenUp />
+      <section aria-label="Summary" className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Kpi label="Income" failed={!!summary.error} value={s && fmt(s.incomeMinor)} format={fmt} tone="income" now={s?.incomeMinor} before={prevSummary.data?.incomeMinor} goodWhenUp />
+        <Kpi label="Expense" failed={!!summary.error} value={s && fmt(s.expenseMinor)} format={fmt} tone="expense" now={s?.expenseMinor} before={prevSummary.data?.expenseMinor} goodWhenUp={false} />
+        <Kpi label="Net" failed={!!summary.error} value={s && formatMoney(s.netMinor, cur, { sign: true })} format={(n) => formatMoney(n, cur, { sign: true })} tone={s && s.netMinor < 0 ? "expense" : "income"} now={s?.netMinor} before={prevSummary.data?.netMinor} goodWhenUp />
         <Card className="col-span-2 p-3 xl:col-span-1">
           <div className="text-xs text-muted">Savings rate</div>
           {s ? <Gauge pct={s.savingsRatePct} band={s.savingsBand} label={bandText[s.savingsBand]} /> : summary.error ? <p className="mt-2 text-sm text-muted">—</p> : <Skeleton className="mt-2 h-24" />}
@@ -100,11 +101,11 @@ export function Dashboard() {
 
         <Widget title="Budgets" state={budgets} action={<Link href="/budgets" className="text-xs text-primary underline">Manage</Link>}>
           {budgets.data && (budgets.data.items.length === 0 ? <Empty>No budgets this month. <Link href="/budgets" className="text-primary underline">Add one</Link></Empty> : (
-            <ul className="space-y-3">
+            <ul className="stagger space-y-3">
               {[...budgets.data.items].sort((a, b) => b.pct - a.pct).slice(0, 5).map((b) => (
                 <li key={b.id}>
                   <div className="flex justify-between gap-2 text-sm"><span className="truncate">{b.categoryName ?? "All expenses"}</span><span className={cx("shrink-0 tabular-nums", b.state === "over" ? "text-expense" : b.state === "warning" ? "text-warn" : "text-muted")}>{b.pct.toFixed(0)}%</span></div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", b.state === "over" ? "bg-expense" : b.state === "warning" ? "bg-warn" : "bg-income")} style={{ width: `${Math.min(100, b.pct)}%` }} /></div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("bar-fill h-full rounded-full", b.state === "over" ? "bg-expense" : b.state === "warning" ? "bg-warn" : "bg-income")} style={{ width: `${Math.min(100, b.pct)}%` }} /></div>
                   <div className="mt-0.5 text-xs text-muted tabular-nums">{fmt(b.spentMinor)} / {fmt(b.amountMinor)}</div>
                 </li>
               ))}
@@ -114,7 +115,7 @@ export function Dashboard() {
 
         <Widget title="Recent transactions" className="lg:col-span-2" state={recent} action={<Link href="/transactions" className="text-xs text-primary underline">View all</Link>}>
           {(recent.data?.pages[0]?.data.length ?? 0) === 0 ? <Empty>Nothing recorded this month.</Empty> : (
-            <ul className="divide-y divide-border">
+            <ul className="stagger divide-y divide-border">
               {recent.data!.pages[0]!.data.slice(0, 6).map((t) => <TransactionRow key={t.id} tx={t} categories={cats.data} accounts={accounts.data} baseCurrency={cur} />)}
             </ul>
           )}
@@ -128,13 +129,15 @@ export function Dashboard() {
   );
 }
 
-function Kpi({ label, value, tone, now, before, goodWhenUp, failed }: { label: string; value?: string; failed?: boolean; tone: "income" | "expense"; now?: number; before?: number; goodWhenUp: boolean }) {
+function Kpi({ label, value, tone, now, before, goodWhenUp, failed, format }: { label: string; value?: string; failed?: boolean; format?: (n: number) => string; tone: "income" | "expense"; now?: number; before?: number; goodWhenUp: boolean }) {
   const delta = now !== undefined && before !== undefined && before !== 0 ? ((now - before) / Math.abs(before)) * 100 : null;
   const good = delta === null ? null : goodWhenUp ? delta >= 0 : delta <= 0;
+  const rolling = useCountUp(value === undefined ? undefined : now);
+  const shown = format && rolling !== undefined && rolling !== now ? format(rolling) : value;
   return (
     <Card className="p-3 sm:p-4">
       <div className="text-xs text-muted">{label}</div>
-      {value === undefined ? (failed ? <div className="mt-1 text-lg text-muted sm:text-2xl">—</div> : <Skeleton className="mt-2 h-7 w-24" />) : <div className={cx("mt-1 truncate text-lg font-semibold tabular-nums sm:text-2xl", tone === "income" ? "text-income" : "text-expense")} title={value}>{value}</div>}
+      {value === undefined ? (failed ? <div className="mt-1 text-lg text-muted sm:text-2xl">—</div> : <Skeleton className="mt-2 h-7 w-24" />) : <div className={cx("mt-1 truncate text-lg font-semibold tabular-nums sm:text-2xl", tone === "income" ? "text-income" : "text-expense")} title={value}>{shown}</div>}
       {delta !== null && Math.abs(delta) >= 0.5 && (
         <div className={cx("mt-1 text-xs tabular-nums", good ? "text-income" : "text-expense")} aria-label={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta).toFixed(0)} percent versus last month`}>{delta > 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}% <span className="text-muted">vs last month</span></div>
       )}
@@ -147,13 +150,13 @@ function BalanceBars({ accounts }: { accounts: { id: string; name: string; curre
   const maxByCur = new Map<string, number>();
   for (const a of accounts) maxByCur.set(a.currency, Math.max(maxByCur.get(a.currency) ?? 0, Math.abs(a.balanceMinor)));
   return (
-    <ul className="space-y-3">
+    <ul className="stagger space-y-3">
       {accounts.map((a) => {
         const pct = (Math.abs(a.balanceMinor) / (maxByCur.get(a.currency) || 1)) * 100;
         return (
           <li key={a.id}>
             <div className="flex justify-between gap-2 text-sm"><span className="truncate">{a.name}</span><span className={cx("shrink-0 tabular-nums", a.balanceMinor < 0 && "text-expense")}>{formatMoney(a.balanceMinor, a.currency)}</span></div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", a.balanceMinor < 0 ? "bg-expense" : "bg-primary")} style={{ width: `${Math.max(2, pct)}%` }} /></div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("bar-fill h-full rounded-full", a.balanceMinor < 0 ? "bg-expense" : "bg-primary")} style={{ width: `${Math.max(2, pct)}%` }} /></div>
           </li>
         );
       })}

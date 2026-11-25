@@ -1,11 +1,11 @@
-import { badGateway } from "@/lib/server/http";
+import { badGateway, forwardedFor } from "@/lib/server/http";
 import { API_URL, setSession } from "@/lib/server/session";
 
 export async function POST(req: Request) {
   const body = await req.text();
   let up: Response;
   try {
-    up = await fetch(`${API_URL}/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json", "user-agent": req.headers.get("user-agent") ?? "web" }, body, cache: "no-store" });
+    up = await fetch(`${API_URL}/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json", "user-agent": req.headers.get("user-agent") ?? "web", ...forwardedFor(req) }, body, cache: "no-store" });
   } catch {
     return badGateway();
   }
