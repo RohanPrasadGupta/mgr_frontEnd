@@ -82,7 +82,7 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
           <Field label="Date & time"><Input type="datetime-local" required value={when} onChange={(e) => setWhen(e.target.value)} /></Field>
           <Field label="Note"><Input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={save.isPending}>{save.isPending ? "Transferring…" : "Transfer"}</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Transferring…" : "Transfer"}</Button></div>
         </form>
       )}
     </Modal>

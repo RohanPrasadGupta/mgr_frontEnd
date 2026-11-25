@@ -1,13 +1,13 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { baseRoutes } from "@/test/fixtures";
+import { baseRoutes, me } from "@/test/fixtures";
 import { mockFetch, renderWithClient } from "@/test/utils";
 import { AppShell } from "./app-shell";
 
 const nav = vi.hoisted(() => ({ path: "/budgets", replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => nav.path, useRouter: () => ({ replace: nav.replace, refresh: nav.refresh }) }));
-vi.mock("next/link", () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a> }));
+vi.mock("next/link", () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a>, useLinkStatus: () => ({ pending: false }) }));
 beforeEach(() => { nav.path = "/budgets"; nav.replace.mockReset(); nav.refresh.mockReset(); });
 
 describe("AppShell", () => {
@@ -15,7 +15,7 @@ describe("AppShell", () => {
     mockFetch(baseRoutes);
     renderWithClient(<AppShell><p>content</p></AppShell>);
     const [side] = screen.getAllByRole("navigation", { name: "Main" });
-    for (const label of ["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Recurring", "Accounts", "Categories", "Import & export", "Settings"]) {
+    for (const label of ["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Goals", "Debts", "Reports", "Recurring", "Accounts", "Categories", "Notes", "Import & export", "Settings"]) {
       expect(within(side!).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
     expect(within(side!).getByRole("link", { name: /Budgets/ })).toHaveAttribute("aria-current", "page");
@@ -63,7 +63,7 @@ describe("AppShell", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open menu" }));
     const drawer = await screen.findByRole("presentation");
     const links = within(drawer).getAllByRole("link").map((l) => l.textContent);
-    expect(links).toEqual(["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Recurring", "Accounts", "Categories", "Import & export", "Settings"]);
+    expect(links).toEqual(["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Goals", "Debts", "Reports", "Recurring", "Accounts", "Categories & tags", "Notes", "Import & export", "Settings"]);
     await userEvent.click(within(drawer).getByRole("button", { name: "Close menu" }));
 
     await vi.waitFor(() => expect(document.querySelector(".MuiDrawer-root")).toBeNull()); // modal un-hides the page when it has left
@@ -82,5 +82,22 @@ describe("AppShell", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(m.last("POST", "/api/auth/logout")).toBeDefined();
     await vi.waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/login"));
+  });
+
+  it("asks unverified users to confirm their email and can resend the link", async () => {
+    const m = mockFetch({ ...baseRoutes, "GET /me": { data: { ...me, emailVerified: false } }, "POST /me/resend-verification": { data: { accepted: true } } });
+    renderWithClient(<AppShell>x</AppShell>);
+    const banner = await screen.findByText(/Please confirm/);
+    expect(banner).toHaveTextContent(me.email);
+    await userEvent.click(screen.getByRole("button", { name: "Resend email" }));
+    await vi.waitFor(() => expect(m.last("POST", "/me/resend-verification")).toBeDefined());
+    expect(await screen.findByRole("button", { name: "Sent" })).toBeDisabled();
+  });
+
+  it("shows no banner once the email is verified", async () => {
+    mockFetch(baseRoutes);
+    renderWithClient(<AppShell>x</AppShell>);
+    await screen.findAllByText("me@example.com");
+    expect(screen.queryByText(/Please confirm/)).not.toBeInTheDocument();
   });
 });

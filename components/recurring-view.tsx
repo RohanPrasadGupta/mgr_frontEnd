@@ -4,7 +4,7 @@ import { call, client } from "@/lib/api/client";
 import { invalidateLedger, invalidateRecurring, useAccounts, useCategories, useRecurring, useMutate } from "@/lib/api/hooks";
 import type { Body, Frequency, RecurringRule } from "@/lib/api/types";
 import { formatMoney, pad, toMajor, toMinor } from "@/lib/money";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Segmented, Select, Skeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Segmented, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const UNIT: Record<Frequency, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year" };
@@ -49,10 +49,10 @@ export function RecurringView() {
       {actionError && <ErrorNote error={new Error(actionError)} />}
       {report && <div role="status" className="rounded-xl border border-border bg-card p-3 text-sm">{report}</div>}
 
-      {rules.isPending ? <Skeleton className="h-48" /> : rules.error ? <ErrorNote error={rules.error} retry={() => rules.refetch()} /> : sorted.length === 0 ? (
+      {rules.isPending ? <ListSkeleton rows={4} /> : rules.error ? <ErrorNote error={rules.error} retry={() => rules.refetch()} /> : sorted.length === 0 ? (
         <Empty>No recurring rules. Add rent, salary or subscriptions so they record themselves.</Empty>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="stagger grid gap-3 md:grid-cols-2">
           {sorted.map((r) => {
             const cat = categories.data?.find((c) => c.id === r.categoryId);
             const acct = accounts.data?.find((a) => a.id === r.accountId);
@@ -136,7 +136,7 @@ function RuleDialog({ state, onClose }: { state: { edit?: RecurringRule } | null
           </div>
           {pastStart && <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="backfill" className="mt-1" /><span>Also record the missed dates since the start date<span className="block text-xs text-muted">Otherwise it starts from the next upcoming date.</span></span></label>}
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
         </form>
       )}
     </Modal>

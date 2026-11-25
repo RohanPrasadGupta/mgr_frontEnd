@@ -4,7 +4,8 @@ import { call, client } from "@/lib/api/client";
 import type { Body, Category } from "@/lib/api/types";
 import { qk, useCategories, useMutate } from "@/lib/api/hooks";
 import { RowActions } from "./row-actions";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Segmented, Skeleton } from "./ui";
+import { TagsCard } from "./tags-card";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Segmented } from "./ui";
 import { useConfirm } from "./feedback";
 
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalidateQueries({ queryKey: qk.categories });
@@ -40,15 +41,15 @@ export function CategoriesView() {
         <h1 className="text-2xl font-semibold">Categories</h1>
         <Button onClick={() => { setError(null); setEditing(null); setOpen(true); }}>+ Add category</Button>
       </div>
-      {categories.isPending ? <Skeleton className="h-48" /> : categories.error ? <ErrorNote error={categories.error} retry={() => categories.refetch()} /> : (
-        <div className="grid gap-4 md:grid-cols-2">
+      {categories.isPending ? <ListSkeleton rows={6} /> : categories.error ? <ErrorNote error={categories.error} retry={() => categories.refetch()} /> : (
+        <div className="stagger grid gap-4 md:grid-cols-2">
           {(["expense", "income"] as const).map((k) => {
             const items = categories.data.filter((c) => c.kind === k);
             return (
               <Card key={k}>
                 <h2 className="mb-2 flex justify-between text-sm font-semibold capitalize"><span>{k}</span><span className="font-normal text-muted">{items.length}</span></h2>
                 {items.length === 0 ? <Empty>None yet.</Empty> : (
-                  <ul className="divide-y divide-border">
+                  <ul className="stagger divide-y divide-border">
                     {items.map((c) => (
                       <li key={c.id} className="flex items-center justify-between py-2 text-sm">
                         <span className="truncate"><span aria-hidden className="mr-2">{c.icon ?? "•"}</span>{c.name}</span>
@@ -63,13 +64,14 @@ export function CategoriesView() {
           })}
         </div>
       )}
+      <TagsCard />
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Edit category" : "Add category"}>
         <form onSubmit={submit} className="space-y-3">
           {!editing && <Segmented value={kind} onChange={setKind} options={[{ value: "expense", label: "Expense", tone: "expense" }, { value: "income", label: "Income", tone: "income" }]} />}
           <Field label="Name"><Input name="name" key={editing?.id ?? "new"} defaultValue={editing?.name ?? ""} required maxLength={60} autoFocus /></Field>
           <Field label="Icon (emoji)" hint="Optional"><Input name="icon" key={`i-${editing?.id ?? "new"}`} defaultValue={editing?.icon ?? ""} maxLength={8} /></Field>
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={create.isPending || update.isPending}>{editing ? "Save" : "Add"}</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={create.isPending || update.isPending}>{editing ? "Save" : "Add"}</Button></div>
         </form>
       </Modal>
     </div>

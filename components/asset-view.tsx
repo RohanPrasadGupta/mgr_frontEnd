@@ -7,7 +7,7 @@ import { invalidateInvestments, useAssetPrices, useAssetTrades, useHolding, useM
 import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/types";
 import { CLASS_LABEL, TYPES_FOR, TYPE_LABEL, isInflow } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
@@ -25,7 +25,7 @@ export function AssetView() {
   const patch = useMutate((body: Body<"/investments/assets/{id}", "patch">) => call(client.PATCH("/investments/assets/{id}", { params: { path: { id } }, body })), invalidateInvestments, "Asset updated");
   const remove = useMutate(() => call(client.DELETE("/investments/assets/{id}", { params: { path: { id } } })), invalidateInvestments, "Asset deleted");
 
-  if (holding.isPending) return <Skeleton className="h-96" />;
+  if (holding.isPending) return <PageSkeleton />;
   if (holding.error) return <div className="space-y-3"><Link href="/investments" className="text-sm text-primary underline">← Investments</Link><ErrorNote error={holding.error} retry={() => holding.refetch()} /></div>;
   const h = holding.data;
   const a = h.asset;
@@ -72,7 +72,7 @@ export function AssetView() {
 
       <Card>
         <h2 className="mb-2 text-sm font-semibold">{units ? "Trades" : "Contributions & withdrawals"}</h2>
-        {trades.isPending ? <Skeleton className="h-32" /> : trades.error ? <ErrorNote error={trades.error} /> : trades.data.length === 0 ? <Empty>Nothing recorded yet.</Empty> : (
+        {trades.isPending ? <ListSkeleton rows={3} /> : trades.error ? <ErrorNote error={trades.error} /> : trades.data.length === 0 ? <Empty>Nothing recorded yet.</Empty> : (
           <ul className="divide-y divide-border">
             {trades.data.map((t) => (
               <li key={t.id}>
@@ -145,7 +145,7 @@ function PriceCard({ h }: { h: Holding }) {
         <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
           <Field label={units ? `Price per unit (${a.currency})` : `Total value (${a.currency})`}><Input type="number" step="any" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} className="w-40" /></Field>
           <Field label="As of"><Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-          <Button type="submit" disabled={save.isPending}>Update</Button>
+          <Button type="submit" loading={save.isPending}>Update</Button>
         </form>
       </div>
       {error && <div className="mt-2"><ErrorNote error={new Error(error)} /></div>}
@@ -215,8 +215,8 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
         )}
         {error && <ErrorNote error={new Error(error)} />}
         <div className="flex items-center justify-between pt-2">
-          {trade ? <Button type="button" variant="danger" onClick={remove} disabled={del.isPending}>Delete</Button> : <span />}
-          <div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
+          {trade ? <Button type="button" variant="danger" onClick={remove} loading={del.isPending}>Delete</Button> : <span />}
+          <div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
         </div>
       </form>
     </Modal>

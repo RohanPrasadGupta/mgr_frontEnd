@@ -2,6 +2,10 @@
 import AccountBalanceWalletOutlined from "@mui/icons-material/AccountBalanceWalletOutlined";
 import AddRounded from "@mui/icons-material/AddRounded";
 import AutorenewRounded from "@mui/icons-material/AutorenewRounded";
+import AssessmentOutlined from "@mui/icons-material/AssessmentOutlined";
+import FlagOutlined from "@mui/icons-material/FlagOutlined";
+import HandshakeOutlined from "@mui/icons-material/HandshakeOutlined";
+import StickyNote2Outlined from "@mui/icons-material/StickyNote2Outlined";
 import CategoryOutlined from "@mui/icons-material/CategoryOutlined";
 import DashboardOutlined from "@mui/icons-material/DashboardOutlined";
 import DonutSmallOutlined from "@mui/icons-material/DonutSmallOutlined";
@@ -18,14 +22,16 @@ import SpeedDial from "@mui/material/SpeedDial";
 import SpeedDialAction from "@mui/material/SpeedDialAction";
 import SpeedDialIcon from "@mui/material/SpeedDialIcon";
 import Tooltip from "@mui/material/Tooltip";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe } from "@/lib/api/hooks";
 import { useOnline } from "@/lib/use-online";
 import { TransactionForm } from "./transaction-form";
 import { TransferDialog } from "./transfer-dialog";
-import { cx } from "./ui";
+import { VerifyBanner } from "./verify-banner";
+import { ActivityBar } from "./activity-bar";
+import { Spinner, cx } from "./ui";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: DashboardOutlined },
@@ -33,15 +39,25 @@ const NAV = [
   { href: "/transfers", label: "Transfers", icon: SwapHorizRounded },
   { href: "/budgets", label: "Budgets", icon: DonutSmallOutlined },
   { href: "/investments", label: "Investments", icon: TrendingUpRounded },
+  { href: "/goals", label: "Goals", icon: FlagOutlined },
+  { href: "/debts", label: "Debts", icon: HandshakeOutlined },
+  { href: "/reports", label: "Reports", icon: AssessmentOutlined },
   { href: "/recurring", label: "Recurring", icon: AutorenewRounded },
   { href: "/accounts", label: "Accounts", icon: AccountBalanceWalletOutlined },
-  { href: "/categories", label: "Categories", icon: CategoryOutlined },
+  { href: "/categories", label: "Categories & tags", icon: CategoryOutlined },
+  { href: "/notes", label: "Notes", icon: StickyNote2Outlined },
   { href: "/import", label: "Import & export", icon: UploadFileOutlined },
   { href: "/settings", label: "Settings", icon: SettingsOutlined },
 ] as const;
 
 const QUICK = ["/", "/transactions", "/budgets", "/investments"];
 const STORE = "mm_nav";
+
+/** The clicked link's icon turns into a spinner until the new page is ready, so a slow route never looks ignored. */
+function NavIcon({ icon: Icon }: { icon: (typeof NAV)[number]["icon"] }) {
+  const { pending } = useLinkStatus();
+  return pending ? <Spinner className="size-5" /> : <Icon fontSize="small" aria-hidden />;
+}
 
 function NavLinks({ active, collapsed, onNavigate }: { active: (h: string) => boolean; collapsed?: boolean; onNavigate?: () => void }) {
   return (
@@ -50,9 +66,9 @@ function NavLinks({ active, collapsed, onNavigate }: { active: (h: string) => bo
         const on = active(href);
         const link = (
           <Link key={href} href={href} onClick={onNavigate} aria-current={on ? "page" : undefined} aria-label={collapsed ? label : undefined}
-            className={cx("relative flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium transition-colors", collapsed ? "justify-center px-0" : "px-3",
+            className={cx("relative flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium transition-colors duration-200 active:scale-[0.98]", collapsed ? "justify-center px-0" : "px-3",
               on ? "bg-primary/12 text-primary before:absolute before:inset-y-1.5 before:left-0 before:w-1 before:rounded-full before:bg-primary" : "text-muted hover:bg-border/50 hover:text-fg")}>
-            <Icon fontSize="small" aria-hidden />{!collapsed && <span className="truncate">{label}</span>}
+            <NavIcon icon={Icon} />{!collapsed && <span className="anim-fade truncate">{label}</span>}
           </Link>
         );
         return collapsed ? <Tooltip key={href} title={label} placement="right" arrow>{link}</Tooltip> : link;
@@ -108,10 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      <ActivityBar />
       {/* Desktop/tablet: sticky sidebar that stays put while the page scrolls; the burger toggles icons-only ↔ icons + labels. */}
-      <aside className={cx("sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 md:flex", collapsed ? "w-[4.5rem]" : "w-60")} data-collapsed={collapsed}>
+      <aside className={cx("sticky top-0 hidden h-screen print:!hidden shrink-0 flex-col border-r border-border bg-card transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] md:flex", collapsed ? "w-[4.5rem]" : "w-60")} data-collapsed={collapsed}>
         <div className={cx("flex h-16 items-center gap-2 px-3", collapsed ? "justify-center" : "justify-between")}>
-          {!collapsed && <span className="truncate pl-2 text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>}
+          {!collapsed && <span className="anim-fade truncate pl-2 text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>}
           <button type="button" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}
             className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-border/50 hover:text-fg">{collapsed ? <MenuRounded /> : <MenuOpenRounded />}</button>
         </div>
@@ -120,11 +137,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="min-w-0 flex-1 pb-24 md:pb-0">
-        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex print:hidden items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur md:hidden">
           <button type="button" onClick={() => setDrawer(true)} aria-label="Open menu" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-border/50"><MenuRounded /></button>
           <span className="text-base font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>
         </header>
-        {!online && <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-sm text-warn">You’re offline — changes can’t be saved until your connection is back.</div>}
+        <VerifyBanner />
+        {!online && <div role="status" className="anim-rise border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-sm text-warn">You’re offline — changes can’t be saved until your connection is back.</div>}
         <main className="mx-auto w-full max-w-6xl p-4 md:p-8 2xl:max-w-[88rem]">{children}</main>
       </div>
 
@@ -138,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </Drawer>
 
       {/* Phones/small tablets: one thumb-reachable speed dial, bottom-left, replaces the old bottom tab bar. */}
-      <div className="md:hidden">
+      <div className="md:hidden print:hidden">
         <SpeedDial ariaLabel="Quick actions" icon={<SpeedDialIcon />} direction="up" sx={{ position: "fixed", bottom: 16, left: 16 }}>
           {quick.map((a) => <SpeedDialAction key={a.name} icon={a.icon} onClick={a.run} slotProps={{ tooltip: { title: a.name, open: true, placement: "right" } }} />)}
         </SpeedDial>

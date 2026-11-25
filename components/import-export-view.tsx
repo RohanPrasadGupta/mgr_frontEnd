@@ -44,12 +44,15 @@ function ImportTransactions() {
   async function onFile(file: File | undefined) {
     setError(null); setReport(null); setChecked(false); setRaw(null);
     if (!file) return;
-    setFileName(file.name); setBusy("parse");
+    setFileName(file.name);
+    // Spreadsheet parsing runs on the main thread: refuse files far larger than any real export instead of freezing the tab.
+    if (file.size > 15 * 1024 * 1024) { setError("That file is larger than 15 MB. Export a smaller date range and import it in parts."); return; }
+    setBusy("parse");
     try {
       const XLSX = await import("xlsx"); // loaded on demand: only this screen needs it
       // CSV must be decoded as UTF-8 text: handing SheetJS raw bytes makes it assume Latin-1 and garble emoji / Thai / Nepali text. `raw` stops SheetJS guessing dates (it assumes US month/day) so our day/month setting decides.
       const isCsv = /\.csv$/i.test(file.name) || file.type === "text/csv";
-      const wb = isCsv ? XLSX.read(await file.text(), { type: "string", raw: true }) : XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const wb = isCsv ? XLSX.read(await file.text(), { type: "string", raw: true, sheets: 0 }) : XLSX.read(await file.arrayBuffer(), { type: "array", sheets: 0, bookVBA: false, cellHTML: false });
       const sheet = wb.Sheets[wb.SheetNames[0]!];
       if (!sheet) throw new Error("The file has no sheets");
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { raw: true, defval: "" });

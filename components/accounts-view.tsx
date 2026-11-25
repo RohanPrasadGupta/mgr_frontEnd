@@ -5,7 +5,7 @@ import { qk, useAccounts, useCurrencies, useMe, useMutate } from "@/lib/api/hook
 import type { Account, AccountType, Body } from "@/lib/api/types";
 import { formatMoney, toMinor } from "@/lib/money";
 import { TransferDialog } from "./transfer-dialog";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const TYPES: AccountType[] = ["cash", "bank", "wallet", "card", "loan", "investment"];
@@ -49,8 +49,8 @@ export function AccountsView() {
         </div>
       </div>
       {actionError && <ErrorNote error={new Error(actionError)} />}
-      {accounts.isPending ? <Skeleton className="h-40" /> : accounts.error ? <ErrorNote error={accounts.error} retry={() => accounts.refetch()} /> : visible.length === 0 ? <Empty>No accounts yet.</Empty> : (
-        <div className="grid gap-3 sm:grid-cols-2">
+      {accounts.isPending ? <ListSkeleton rows={4} /> : accounts.error ? <ErrorNote error={accounts.error} retry={() => accounts.refetch()} /> : visible.length === 0 ? <Empty>No accounts yet.</Empty> : (
+        <div className="stagger grid gap-3 sm:grid-cols-2">
           {visible.map((a: Account) => (
             <Card key={a.id} className={cx(a.archived && "opacity-60")}>
               <div className="flex items-start justify-between">
@@ -74,7 +74,7 @@ export function AccountsView() {
           <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}>{currencies.data?.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</Select></Field>
           <Field label="Opening balance"><Input name="opening" type="number" step="0.01" defaultValue="0" /></Field>
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={create.isPending}>Add</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={create.isPending}>Add</Button></div>
         </form>
       </Modal>
     </div>

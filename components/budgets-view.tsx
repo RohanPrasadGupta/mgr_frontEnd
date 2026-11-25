@@ -5,7 +5,7 @@ import { invalidateBudgets, useBudgetStatus, useCategories, useMe, useMutate } f
 import type { Body, BudgetPeriod, BudgetStatusItem } from "@/lib/api/types";
 import { budgetDate, formatMoney, pad, toMajor, toMinor } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const PERIOD: Record<BudgetPeriod, string> = { month: "Monthly", week: "Weekly", custom: "Custom range" };
@@ -32,10 +32,10 @@ export function BudgetsView() {
         </div>
       </div>
 
-      {status.isPending ? <Skeleton className="h-48" /> : status.error ? <ErrorNote error={status.error} retry={() => status.refetch()} /> : status.data.items.length === 0 ? (
+      {status.isPending ? <CardsSkeleton count={3} className="lg:grid-cols-2" /> : status.error ? <ErrorNote error={status.error} retry={() => status.refetch()} /> : status.data.items.length === 0 ? (
         <Empty>No budgets active in this month. Add one to track your spending against a limit.</Empty>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className={cx("stagger grid gap-3 md:grid-cols-2", status.isPlaceholderData && "refreshing")}>
           {status.data.items.map((b) => (
             <Card key={b.id}>
               <div className="flex items-start justify-between gap-2">
@@ -46,7 +46,7 @@ export function BudgetsView() {
                 <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-xs font-medium", b.state === "ok" ? "bg-income/15 text-income" : b.state === "warning" ? "bg-warn/15 text-warn" : "bg-expense/15 text-expense")}>{stateText[b.state]}</span>
               </div>
               <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-border" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(b.pct))} aria-label={`${b.categoryName ?? "All expenses"} budget used`}>
-                <div className={cx("h-full rounded-full", stateStyle[b.state])} style={{ width: `${Math.min(100, b.pct)}%` }} />
+                <div className={cx("bar-fill h-full rounded-full", stateStyle[b.state])} style={{ width: `${Math.min(100, b.pct)}%` }} />
               </div>
               <div className="mt-2 flex justify-between text-sm tabular-nums">
                 <span>{formatMoney(b.spentMinor, base)} <span className="text-muted">of {formatMoney(b.amountMinor, base)}</span></span>
@@ -108,7 +108,7 @@ function BudgetDialog({ state, base, onClose }: { state: { edit?: BudgetStatusIt
           <Field label={`Limit (${base})`}><Input name="amount" type="number" step="0.01" min="0" required defaultValue={edit ? toMajor(edit.amountMinor, base) : ""} autoFocus /></Field>
           <Field label="Warn me at (% used)"><Input name="threshold" type="number" min="1" max="100" defaultValue={edit?.alertThresholdPct ?? 80} /></Field>
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
         </form>
       )}
     </Modal>

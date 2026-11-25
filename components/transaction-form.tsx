@@ -1,16 +1,21 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { call, client } from "@/lib/api/client";
+import { call, client, uploadAttachment } from "@/lib/api/client";
 import { invalidateLedger, useAccounts, useCategories, useMe, useMutate } from "@/lib/api/hooks";
 import type { Body, Transaction } from "@/lib/api/types";
 import { minorUnit, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, ErrorNote, Field, Input, Modal, Segmented, Select } from "./ui";
 import { useConfirm } from "./feedback";
+import { AttachmentsPanel, PendingAttachments } from "./attachments-panel";
+import { TagPicker } from "./tag-picker";
+import { toast } from "@/lib/toast";
 
 const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose: () => void; tx?: Transaction | null }) {
   const confirm = useConfirm();
+  const qc = useQueryClient();
   const accounts = useAccounts();
   const categories = useCategories();
   const { data: me } = useMe();
@@ -24,6 +29,8 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
   const [when, setWhen] = useState(localInput(new Date()));
   const [note, setNote] = useState("");
   const [fx, setFx] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Reset the fields when the dialog opens (or switches to another transaction) — never when background data refreshes,
@@ -38,8 +45,9 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
       setCategoryId(tx.categoryId ?? "");
       setWhen(localInput(new Date(tx.occurredAt)));
       setNote(tx.note ?? "");
+      setTagIds(tx.tagIds ?? []);
     } else {
-      setKind("expense"); setAmount(""); setCategoryId(""); setWhen(localInput(new Date())); setNote(""); setFx(""); setAccountId("");
+      setKind("expense"); setAmount(""); setCategoryId(""); setWhen(localInput(new Date())); setNote(""); setFx(""); setAccountId(""); setTagIds([]); setFiles([]);
     }
   }, [open, tx]);
 
@@ -60,18 +68,25 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
     const occurredAt = new Date(when).toISOString();
     if (editing) {
       if (!transfer && !(major > 0)) throw new Error("Enter an amount greater than 0");
-      const body: Body<"/transactions/{id}", "patch"> = { occurredAt, note: note || null, ...(transfer ? {} : { amountMinor: toMinor(major, tx!.currency), categoryId: categoryId || null }) };
+      const body: Body<"/transactions/{id}", "patch"> = { occurredAt, note: note || null, tagIds, ...(transfer ? {} : { amountMinor: toMinor(major, tx!.currency), categoryId: categoryId || null }) };
       return call(client.PATCH("/transactions/{id}", { params: { path: { id: tx!.id } }, body }));
     }
     if (!account) throw new Error("Choose an account");
-    return call(client.POST("/transactions", { body: { accountId, kind, amountMinor: toMinor(major, account.currency), categoryId: categoryId || undefined, occurredAt, note: note || undefined, fxRate: fx ? Number(fx) : undefined, clientId: crypto.randomUUID() } }));
+    return call(client.POST("/transactions", { body: { accountId, kind, amountMinor: toMinor(major, account.currency), categoryId: categoryId || undefined, occurredAt, note: note || undefined, fxRate: fx ? Number(fx) : undefined, clientId: crypto.randomUUID(), tagIds } }));
   }, invalidateLedger, editing ? (transfer ? "Transfer updated" : "Transaction updated") : "Transaction added");
   const del = useMutate(() => call(client.DELETE("/transactions/{id}", { params: { path: { id: tx!.id } } })), invalidateLedger, transfer ? "Transfer deleted" : "Transaction deleted");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
+    let saved;
+    try { saved = await save.mutateAsync(undefined as never); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); return; }
+    // Files picked before the transaction existed are uploaded now that it has an id.
+    if (!editing && files.length && saved && "data" in saved) {
+      for (const f of files) await uploadAttachment(saved.data.id, f).catch((e) => toast.error(`${f.name}: ${e instanceof Error ? e.message : "upload failed"}`));
+      void qc.invalidateQueries({ queryKey: ["transactions"] }); // the list was refreshed before the uploads: show the paperclip count
+    }
+    onClose();
   }
   async function remove() {
     if (!(await confirm({ message: transfer ? "Delete this transfer (both sides)?" : "Delete this transaction?", destructive: true }))) return;
@@ -105,12 +120,17 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
         )}
         <Field label="Date & time"><Input type="datetime-local" required value={when} onChange={(e) => setWhen(e.target.value)} /></Field>
         <Field label="Note"><Input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>
+        <div className="space-y-1"><span className="text-xs font-medium text-muted">Tags</span><TagPicker value={tagIds} onChange={setTagIds} /></div>
+        <div className="space-y-1">
+          <span className="text-xs font-medium text-muted">Receipts</span>
+          {editing ? <AttachmentsPanel transactionId={tx!.id} /> : <PendingAttachments files={files} onChange={setFiles} />}
+        </div>
         {error && <ErrorNote error={new Error(error)} />}
         <div className="flex items-center justify-between pt-2">
-          {editing ? <Button type="button" variant="danger" onClick={remove} disabled={del.isPending}>Delete</Button> : <span />}
+          {editing ? <Button type="button" variant="danger" onClick={remove} loading={del.isPending}>Delete</Button> : <span />}
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+            <Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
           </div>
         </div>
       </form>

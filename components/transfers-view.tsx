@@ -6,7 +6,7 @@ import { formatMoney, monthRange } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
 import { TransactionForm } from "./transaction-form";
 import { TransferDialog } from "./transfer-dialog";
-import { Button, Card, Empty, ErrorNote, Skeleton } from "./ui";
+import { Button, Card, Empty, ErrorNote, ListSkeleton, cx } from "./ui";
 
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -31,11 +31,11 @@ export function TransfersView() {
       </div>
       <p className="text-sm text-muted">Moving money between your own accounts. Transfers change balances but never count as income or expense.</p>
 
-      {transfers.isPending ? <Skeleton className="h-48" /> : transfers.error ? <ErrorNote error={transfers.error} retry={() => transfers.refetch()} /> : transfers.data.length === 0 ? (
+      {transfers.isPending ? <ListSkeleton rows={5} /> : transfers.error ? <ErrorNote error={transfers.error} retry={() => transfers.refetch()} /> : transfers.data.length === 0 ? (
         <Empty>No transfers this month.</Empty>
       ) : (
-        <Card className="p-2">
-          <ul className="divide-y divide-border">
+        <Card className={cx("p-2", transfers.isPlaceholderData && "refreshing")}>
+          <ul className="stagger divide-y divide-border">
             {transfers.data.map((p: TransferPair) => (
               <li key={p.groupId}>
                 <button onClick={() => setEditing(p.out)} className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left hover:bg-border/40">
