@@ -112,3 +112,17 @@ export const invalidateTags = (qc: QueryClient) => Promise.all([qc.invalidateQue
 export const invalidateGoals = (qc: QueryClient) => qc.invalidateQueries({ queryKey: qk.goals });
 export const invalidateDebts = (qc: QueryClient) => qc.invalidateQueries({ queryKey: qk.debts });
 export const invalidateNotes = (qc: QueryClient) => qc.invalidateQueries({ queryKey: qk.notes });
+
+/** The stored daily rate the API will use for `from`→`to` on `date` (null when none is stored). */
+export const useFxQuote = (from?: string, to?: string, date?: string) =>
+  useQuery({
+    queryKey: ["fx", { from, to, date }] as const,
+    enabled: !!from && !!to && from !== to,
+    staleTime: 3600_000,
+    retry: false,
+    queryFn: async () => {
+      const res = await client.GET("/fx", { params: { query: { from: from!, to: to!, date } } });
+      if (res.response.status === 404) return null; // no stored rate for this pair
+      return (await call(Promise.resolve(res))).data;
+    },
+  });

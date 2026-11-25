@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, invalidateLedger, qk, useAccounts, useCategories, useMe } from "@/lib/api/hooks";
-import type { ImportReport, InvestmentImportReport, Page, Transaction } from "@/lib/api/types";
+import type { ImportReport, InvestmentImportReport, Transaction } from "@/lib/api/types";
 import { REQUIRED, buildRows, csvCell, detectColumns, parseJsonDocs, type Field, type ImportRow } from "@/lib/import";
 import { toMajor } from "@/lib/money";
 import { Button, Card, ErrorNote, Field as FormField, Input, Segmented, Select, cx } from "./ui";
@@ -143,8 +143,8 @@ const SOURCES = [
   { value: "stock-transactions", label: "Stock trades (transactions)" },
   { value: "stock-capital", label: "Stock capital" },
   { value: "coin-capital", label: "Coin capital" },
-  { value: "sip-capital", label: "SIP capital" },
-  { value: "ssf-capital", label: "SSF capital" },
+  { value: "sip-capital", label: "SIP / mutual fund contributions" },
+  { value: "ssf-capital", label: "Pension / retirement fund contributions" },
 ] as const;
 
 function ImportInvestments() {

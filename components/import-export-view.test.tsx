@@ -102,11 +102,11 @@ describe("Import investments", () => {
     renderWithClient(<ImportExportView />);
     await userEvent.click(screen.getByRole("radio", { name: "Import investments" }));
     await userEvent.selectOptions(screen.getByLabelText("Collection"), "sip-capital");
-    await userEvent.upload(screen.getByLabelText("Choose a JSON file"), new File(['{"name":"NIC","amount":5}\n{"name":"NIC","amount":6}\n'], "sip.jsonl"));
+    await userEvent.upload(screen.getByLabelText("Choose a JSON file"), new File(['{"name":"Growth Fund","amount":5}\n{"name":"Growth Fund","amount":6}\n'], "sip.jsonl"));
     expect(await screen.findByText(/sip\.jsonl · 2 documents/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Check/ }));
     expect(await screen.findByText(/New assets:/)).toBeInTheDocument();
-    expect(m.last("POST", "/imports/investments")!.body).toMatchObject({ source: "sip-capital", dryRun: true, rows: [{ name: "NIC", amount: 5 }, { name: "NIC", amount: 6 }] });
+    expect(m.last("POST", "/imports/investments")!.body).toMatchObject({ source: "sip-capital", dryRun: true, rows: [{ name: "Growth Fund", amount: 5 }, { name: "Growth Fund", amount: 6 }] });
   });
   it("rejects a file that is not JSON", async () => {
     mockFetch(baseRoutes);

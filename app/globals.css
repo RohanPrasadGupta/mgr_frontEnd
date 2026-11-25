@@ -75,6 +75,15 @@ body {
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 dialog::backdrop { background: rgba(4, 7, 24, 0.62); backdrop-filter: blur(2px); }
 
+/* Brand wordmark: one image per background, picked by the same rules as the colour tokens. */
+.logo-on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .logo-on-dark { display: block; }
+  :root:not([data-theme="light"]) .logo-on-light { display: none; }
+}
+:root[data-theme="dark"] .logo-on-dark { display: block; }
+:root[data-theme="dark"] .logo-on-light { display: none; }
+
 /* ── Motion ──────────────────────────────────────────────────────────────────────────────────────
    One small vocabulary used everywhere: things arrive by fading up a few pixels, lists cascade, bars
    grow from their baseline, lines draw. Durations stay under ~0.7 s so nothing waits on an animation,
@@ -132,4 +141,6 @@ dialog[open]::backdrop { animation: mm-fade 0.2s ease-out; }
   body { background: #fff; }
   main { max-width: none !important; padding: 0 !important; }
   .rounded-2xl { break-inside: avoid; box-shadow: none !important; }
+  .logo-on-dark { display: none !important; }
+  .logo-on-light { display: block !important; }
 }

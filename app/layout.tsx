@@ -6,7 +6,12 @@ import { Providers } from "./providers";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-export const metadata: Metadata = { title: "MoneyMgr", description: "Personal finance manager" };
+export const metadata: Metadata = {
+  title: "MoneyMgr",
+  description: "Personal finance manager: track spending, budgets, goals, debts and investments.",
+  applicationName: "MoneyMgr",
+  openGraph: { title: "MoneyMgr", description: "Personal finance manager", images: [{ url: "/brand/icon-512.png", width: 512, height: 512 }] },
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

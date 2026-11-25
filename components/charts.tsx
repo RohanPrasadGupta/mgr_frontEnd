@@ -163,7 +163,8 @@ export function DonutChart({ slices, centerLabel, centerValue, format, ariaLabel
   const [active, setActive] = useState<number | null>(null);
   if (slices.length === 0) return <NoData />;
   const R = 15.9155; // circumference = 100, so dash lengths are literally percentages
-  let offset = 25; // start at 12 o'clock
+  // each slice starts where the previous ones end (25 = 12 o'clock on the 100-unit circle)
+  const offsets = slices.map((_, i) => 25 - slices.slice(0, i).reduce((t, x) => t + x.pct, 0));
   const a = active !== null ? slices[active]! : null;
   return (
     // Layout follows the card's own width (container query), not the viewport: a narrow column stacks the legend under the ring.
@@ -174,9 +175,8 @@ export function DonutChart({ slices, centerLabel, centerValue, format, ariaLabel
           <circle cx="21" cy="21" r={R} fill="none" className="stroke-border" strokeWidth={5} />
           {slices.map((s, i) => {
             const dash = Math.max(0.0001, s.pct - (slices.length > 1 ? 0.6 : 0)); // small gap between slices
-            const el = <circle key={s.label} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="chart-slice" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
-            offset -= s.pct;
-            return el;
+            const offset = offsets[i];
+            return <circle key={s.label} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="chart-slice" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
           })}
         </svg>
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">

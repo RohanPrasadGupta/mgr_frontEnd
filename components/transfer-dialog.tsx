@@ -1,5 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { FxField } from "./fx-field";
+import { rememberFxRate } from "@/lib/fx-memory";
+import { useState } from "react";
+import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
 import { invalidateLedger, useAccounts, useMe, useMutate } from "@/lib/api/hooks";
 import { formatMoney, minorUnit, pad, toMinor } from "@/lib/money";
@@ -11,8 +14,8 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
   const accounts = useAccounts();
   const { data: me } = useMe();
   const active = (accounts.data ?? []).filter((a) => !a.archived);
-  const [fromId, setFromId] = useState("");
-  const [toId, setToId] = useState("");
+  const [pickedFrom, setFromId] = useState("");
+  const [pickedTo, setToId] = useState("");
   const [amount, setAmount] = useState("");
   const [received, setReceived] = useState("");
   const [fx, setFx] = useState("");
@@ -21,27 +24,22 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
   const [error, setError] = useState<string | null>(null);
 
   // Reset the form each time it opens.
-  useEffect(() => {
-    if (!open) return;
+  useResetOn(open ? "open" : null, () => {
     setError(null); setAmount(""); setReceived(""); setFx(""); setNote(""); setWhen(localInput(new Date()));
     setFromId(""); setToId("");
-  }, [open]);
+  });
 
-  // Pick sensible accounts once the list is available (it may load after the dialog opens or refetch while open).
-  useEffect(() => {
-    if (!open || active.length === 0) return;
-    const valid = (id: string) => active.some((a) => a.id === id);
-    const from = valid(fromId) ? fromId : defaultFrom && valid(defaultFrom) ? defaultFrom : active[0]!.id;
-    if (from !== fromId) setFromId(from);
-    if (!valid(toId) || toId === from) setToId(active.find((a) => a.id !== from)?.id ?? "");
-  }, [open, active, fromId, toId, defaultFrom]);
-
+  // Sensible accounts until the user picks: the given/first account sends, the next one receives (the list may load after opening).
+  const valid = (id: string) => active.some((a) => a.id === id);
+  const fromId = valid(pickedFrom) ? pickedFrom : defaultFrom && valid(defaultFrom) ? defaultFrom : (active[0]?.id ?? "");
+  const toId = valid(pickedTo) && pickedTo !== fromId ? pickedTo : (active.find((a) => a.id !== fromId)?.id ?? "");
   const from = active.find((a) => a.id === fromId);
   const to = active.find((a) => a.id === toId);
   const cross = !!from && !!to && from.currency !== to.currency;
   const base = me?.baseCurrency;
   // The API only accepts an explicit rate when exactly one side is non-base; otherwise it uses stored daily rates.
   const showFx = !!from && !!to && !!base && ((from.currency !== base) !== (to.currency !== base));
+  const fxFrom = showFx ? (from!.currency !== base ? from!.currency : to!.currency) : undefined; // the non-base side
   const impliedRate = cross && Number(amount) > 0 && Number(received) > 0 ? Number(received) / Number(amount) : null;
   const short = !!from && Number(amount) > 0 && toMinor(Number(amount), from.currency) > from.balanceMinor;
 
@@ -55,6 +53,7 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
       toAmountMinor = toMinor(Number(received), to.currency);
       if (!(toAmountMinor > 0)) throw new Error(`Enter how much ${to.currency} arrives`);
     }
+    if (showFx && fx) rememberFxRate(fxFrom!, base!, Number(fx));
     return call(client.POST("/transfers", { body: { fromAccountId: from.id, toAccountId: to.id, amountMinor, toAmountMinor, occurredAt: new Date(when).toISOString(), note: note.trim() || undefined, fxRate: showFx && fx ? Number(fx) : undefined } }));
   }, invalidateLedger, "Transfer completed");
 
@@ -78,7 +77,7 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
               <Input type="number" min="0" step={minorUnit(to!.currency) === 0 ? "1" : "0.01"} required value={received} onChange={(e) => setReceived(e.target.value)} />
             </Field>
           )}
-          {showFx && <Field label={`FX rate to ${base}`} hint="Optional — leave empty to use the stored daily rate"><Input type="number" min="0" step="any" value={fx} onChange={(e) => setFx(e.target.value)} /></Field>}
+          {showFx && <FxField from={fxFrom!} to={base!} date={when.slice(0, 10)} value={fx} onChange={setFx} amount={fxFrom === from!.currency ? Number(amount) : Number(received)} />}
           <Field label="Date & time"><Input type="datetime-local" required value={when} onChange={(e) => setWhen(e.target.value)} /></Field>
           <Field label="Note"><Input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>
           {error && <ErrorNote error={new Error(error)} />}

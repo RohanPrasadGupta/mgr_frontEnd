@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { T0, baseRoutes } from "@/test/fixtures";
 import { mockFetch, renderWithClient } from "@/test/utils";
 import type { BudgetStatusItem } from "@/lib/api/types";

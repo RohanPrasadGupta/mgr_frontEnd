@@ -113,7 +113,7 @@ function GoalDialog({ state, onClose }: { state: Goal | "new" | null; onClose: (
         {!edit && (
           <Field label="Track an account (optional)" hint="Progress follows that account's balance instead of money you add by hand.">
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">No — I'll add money manually</option>
+              <option value="">No — I&apos;ll add money manually</option>
               {accounts.data?.filter((a) => !a.archived).map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
             </Select>
           </Field>

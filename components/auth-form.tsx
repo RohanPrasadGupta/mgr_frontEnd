@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authCall } from "@/lib/api/client";
+import { Wordmark } from "./brand";
 import { Button, Card, Field, Input } from "./ui";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -32,7 +33,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     <main className="grid min-h-screen place-items-center p-4">
       <Card className="w-full max-w-sm space-y-4 p-6">
         <div>
-          <h1 className="text-xl font-semibold">MoneyMgr</h1>
+          <h1><Wordmark height={34} priority /></h1>
           <p className="text-sm text-muted">{register ? "Create your account" : "Sign in to continue"}</p>
         </div>
         <form onSubmit={submit} className="space-y-3">

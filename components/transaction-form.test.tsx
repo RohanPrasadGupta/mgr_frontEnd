@@ -51,9 +51,9 @@ describe("TransactionForm — add", () => {
   it("asks for an FX rate only for accounts outside the base currency, and sends it", async () => {
     const m = mockFetch(routes());
     await open(<TransactionForm open onClose={vi.fn()} />);
-    expect(screen.queryByLabelText(/FX rate/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Exchange rate/)).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Account"), npr.id);
-    const fx = await screen.findByLabelText(/FX rate NPR → THB/);
+    const fx = await screen.findByLabelText(/Exchange rate NPR → THB/);
     await userEvent.type(fx, "0.25");
     await userEvent.type(screen.getByLabelText(/^Amount \(NPR\)/), "400");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));

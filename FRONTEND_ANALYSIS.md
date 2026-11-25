@@ -136,7 +136,7 @@ Range presets 7/30/90 days or manual dates + optional category filter → live p
 - **Overview**: stat strip (stock / SIP / NPR-combined / coin / SSF), NPR allocation donut (stock+SIP, same-currency only), 12-month stacked area of capital added, entries-by-type bar, merged Recent Activity across trackers. Coin kept separate in THB.
 - **Stock capital**: BUY/SELL type filter (server `?type=`), signed amounts (`SELL` negative via `stockCapitalHelpers`), glass stat cards, yearly bar, "Investment Momentum" area+line of monthly contributions vs running total.
 - **Coin**: always THB, no currency selector; selectable **BHT→NPR rate** (`useState("4.3")`) applied to stat cards, tooltips and an NPR table column; signed `amount`/`totalAmount` helpers (`signedCoinAmount`, `signedCoinGrandTotal`); `transactionCharge` field.
-- **SIP**: fund name (Nabil / NIC), NPR, stacked bar by year & fund, donut by fund, table, and a **SIP calculator**:
+- **SIP**: fund name, NPR, stacked bar by year & fund, donut by fund, table, and a **SIP calculator**:
   `monthlyRate = annual% / 12 / 100`; `maturity = P × (((1+r)^n − 1)/r) × (1+r)` (annuity-due; `P×n` if r = 0); `returns = maturity − P×n`; per-year breakdown loop repeats the formula for `m = 12·year`.
 - **SSF**: `amount` per month × `monthsPaid`, `dateAdded`, `paidDate`, notes; uses the typed hooks in `useSsfCapitalServices.ts` (the only investment tab on proper service functions).
 - Shared UI: `InvestmentFormUi.jsx` (dialog header, form shell, delete dialog, `InvestmentStatCard`, `accentFieldSx`).

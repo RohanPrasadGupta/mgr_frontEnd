@@ -4,10 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { publicAuth } from "@/lib/api/client";
 import { Button, Card, Field, Input } from "./ui";
+import { Wordmark } from "./brand";
 
 const Shell = ({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) => (
   <main className="grid min-h-screen place-items-center p-4">
     <Card className="w-full max-w-sm space-y-4 p-6">
+      <Wordmark height={26} />
       <div><h1 className="text-xl font-semibold">{title}</h1>{subtitle && <p className="text-sm text-muted">{subtitle}</p>}</div>
       {children}
     </Card>

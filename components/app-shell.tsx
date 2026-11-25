@@ -24,7 +24,7 @@ import SpeedDialIcon from "@mui/material/SpeedDialIcon";
 import Tooltip from "@mui/material/Tooltip";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { useMe } from "@/lib/api/hooks";
 import { useOnline } from "@/lib/use-online";
 import { TransactionForm } from "./transaction-form";
@@ -32,6 +32,7 @@ import { TransferDialog } from "./transfer-dialog";
 import { VerifyBanner } from "./verify-banner";
 import { ActivityBar } from "./activity-bar";
 import { Spinner, cx } from "./ui";
+import { Mark, Wordmark } from "./brand";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: DashboardOutlined },
@@ -52,6 +53,10 @@ const NAV = [
 
 const QUICK = ["/", "/transactions", "/budgets", "/investments"];
 const STORE = "mm_nav";
+const navListeners = new Set<() => void>();
+const subscribeNav = (l: () => void) => { navListeners.add(l); return () => { navListeners.delete(l); }; };
+const readNav = () => { try { return localStorage.getItem(STORE) === "1"; } catch { return false; } };
+const writeNav = (v: boolean) => { try { localStorage.setItem(STORE, v ? "1" : "0"); } catch { /* storage blocked */ } navListeners.forEach((l) => l()); };
 
 /** The clicked link's icon turns into a spinner until the new page is ready, so a slow route never looks ignored. */
 function NavIcon({ icon: Icon }: { icon: (typeof NAV)[number]["icon"] }) {
@@ -99,14 +104,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const online = useOnline();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
-  const [collapsed, setCollapsed] = useState(false);
+  // The saved sidebar width lives in localStorage; the server snapshot is "expanded" so hydration matches.
+  const collapsed = useSyncExternalStore(subscribeNav, () => readNav(), () => false);
   const [drawer, setDrawer] = useState(false);
   const [adding, setAdding] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  // Restore the saved sidebar width after hydration (reading it during render would mismatch the server HTML).
-  useEffect(() => { try { setCollapsed(localStorage.getItem(STORE) === "1"); } catch { /* storage blocked */ } }, []);
-  useEffect(() => setDrawer(false), [path]);
-  const toggle = () => setCollapsed((c) => { try { localStorage.setItem(STORE, c ? "0" : "1"); } catch { /* ignore */ } return !c; });
+  // Navigating closes the mobile drawer.
+  const [drawerPath, setDrawerPath] = useState(path);
+  if (drawerPath !== path) { setDrawerPath(path); setDrawer(false); }
+  const toggle = () => writeNav(!collapsed);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -114,7 +120,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const initials = (me?.name ?? "").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "·";
   const quick = [
     { icon: <AddRounded />, name: "Add transaction", run: () => setAdding(true) },
     { icon: <SwapHorizRounded />, name: "New transfer", run: () => setTransferring(true) },
@@ -127,8 +132,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ActivityBar />
       {/* Desktop/tablet: sticky sidebar that stays put while the page scrolls; the burger toggles icons-only ↔ icons + labels. */}
       <aside className={cx("sticky top-0 hidden h-screen print:!hidden shrink-0 flex-col border-r border-border bg-card transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] md:flex", collapsed ? "w-[4.5rem]" : "w-60")} data-collapsed={collapsed}>
-        <div className={cx("flex h-16 items-center gap-2 px-3", collapsed ? "justify-center" : "justify-between")}>
-          {!collapsed && <span className="anim-fade truncate pl-2 text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>}
+        <div className={cx("flex items-center gap-2 px-3", collapsed ? "flex-col justify-center py-3" : "h-16 justify-between")}>
+          <Link href="/" aria-label="MoneyMgr home" className={cx("anim-fade", !collapsed && "pl-2")}>{collapsed ? <Mark size={34} /> : <Wordmark height={26} priority />}</Link>
           <button type="button" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}
             className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-border/50 hover:text-fg">{collapsed ? <MenuRounded /> : <MenuOpenRounded />}</button>
         </div>
@@ -139,7 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="min-w-0 flex-1 pb-24 md:pb-0">
         <header className="sticky top-0 z-30 flex print:hidden items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur md:hidden">
           <button type="button" onClick={() => setDrawer(true)} aria-label="Open menu" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-border/50"><MenuRounded /></button>
-          <span className="text-base font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>
+          <Link href="/" aria-label="MoneyMgr home"><Wordmark height={22} priority /></Link>
         </header>
         <VerifyBanner />
         {!online && <div role="status" className="anim-rise border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-sm text-warn">You’re offline — changes can’t be saved until your connection is back.</div>}
@@ -148,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Drawer open={drawer} onClose={() => setDrawer(false)} sx={{ display: { md: "none" } }} slotProps={{ paper: { sx: { width: 280, maxWidth: "85vw" } } }}>
         <div className="flex h-14 items-center justify-between px-4">
-          <span className="text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>
+          <Wordmark height={24} />
           <button type="button" onClick={() => setDrawer(false)} aria-label="Close menu" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-border/50"><MenuOpenRounded /></button>
         </div>
         <NavLinks active={active} onNavigate={() => setDrawer(false)} />

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { invalidateBudgets, useBudgetStatus, useCategories, useMe, useMutate } from "@/lib/api/hooks";
+import { invalidateBudgets, useBudgetStatus, useCategories, useMutate } from "@/lib/api/hooks";
 import type { Body, BudgetPeriod, BudgetStatusItem } from "@/lib/api/types";
 import { budgetDate, formatMoney, pad, toMajor, toMinor } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
