@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAccounts, useBudgetStatus, useByCategory, useCategories, useDaily, useLatestTransaction, useMe, useSummary, useTransactions, useTrend } from "@/lib/api/hooks";
 import { compact, toSlices } from "@/lib/chart-utils";
 import { budgetDate, formatMoney, monthLabel, monthRange, pad, shiftMonth, toMajor } from "@/lib/money";
@@ -19,7 +19,7 @@ const bandText = { healthy: "Healthy savings", low: "Low buffer", overspending: 
 export function Dashboard() {
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const touched = useRef(false); // once the user picks a month themselves we stop auto-selecting
+  const [touched, setTouched] = useState(false); // once the user picks a month themselves we stop auto-selecting
   const { from, to } = monthRange(ym.year, ym.month);
   const prev = shiftMonth(ym.year, ym.month, -1);
   const prevRange = monthRange(prev.year, prev.month);
@@ -41,11 +41,10 @@ export function Dashboard() {
   const latest = useLatestTransaction();
   const s = summary.data;
   // A returning user whose current month is still empty lands on their most recent month with data instead of a blank page.
-  useEffect(() => {
-    if (touched.current || !latest.data || summary.data?.transactionCount !== 0) return;
+  if (!touched && latest.data && summary.data?.transactionCount === 0 && !summary.isPlaceholderData) {
     const [y, m] = latest.data.occurredOn.split("-").map(Number) as [number, number];
     if (y !== ym.year || m !== ym.month) setYm({ year: y, month: m });
-  }, [latest.data, summary.data?.transactionCount, ym.year, ym.month]);
+  }
   const fmt = (v: number) => formatMoney(v, cur);
   const axis = (v: number) => compact(toMajor(v, cur));
 
@@ -57,7 +56,7 @@ export function Dashboard() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => { touched.current = true; setYm({ year, month }); }} />
+        <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => { setTouched(true); setYm({ year, month }); }} />
       </div>
 
       {summary.error && (

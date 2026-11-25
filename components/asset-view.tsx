@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, useAssetPrices, useAssetTrades, useHolding, useMutate } from "@/lib/api/hooks";
 import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/types";
@@ -122,9 +123,8 @@ function PriceCard({ h }: { h: Holding }) {
   const a = h.asset;
   const prices = useAssetPrices(a.id);
   const [price, setPrice] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(today);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setDate(today()), []);
   const save = useMutate((body: Body<"/investments/assets/{id}/prices", "post">) => call(client.POST("/investments/assets/{id}/prices", { params: { path: { id: a.id } }, body })), invalidateInvestments, "Price saved");
   const units = a.tracking === "units";
 
@@ -170,8 +170,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
   const [error, setError] = useState<string | null>(null);
   const unit = 10 ** minorUnit(a.currency);
 
-  useEffect(() => {
-    if (!open) return;
+  useResetOn(open ? (trade?.id ?? "new") : null, () => {
     setError(null);
     if (trade) {
       setType(trade.type); setQty(trade.quantity === null ? "" : String(trade.quantity));
@@ -179,7 +178,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
       setAmount(String(toMajor(trade.amountMinor, a.currency))); setFee(trade.feeMinor ? String(toMajor(trade.feeMinor, a.currency)) : "");
       setDate(trade.tradedOn); setNote(trade.note ?? ""); setInAvg(trade.includeInAvg);
     } else { setType(options[0]!.value); setQty(""); setPrice(""); setAmount(""); setFee(""); setDate(today()); setNote(""); setInAvg(true); }
-  }, [open, trade, a.currency, unit]); // eslint-disable-line react-hooks/exhaustive-deps
+  });
 
   const qtyType = type === "buy" || type === "sell" || type === "bonus";
   const priced = type === "buy" || type === "sell";

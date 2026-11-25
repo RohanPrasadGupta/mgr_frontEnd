@@ -44,11 +44,11 @@ describe("typed client + call()", () => {
   });
 
   it("sends the user to /login on 401", async () => {
-    const assign = vi.fn();
-    vi.stubGlobal("location", { assign, origin: "http://localhost:3000" });
+    const replace = vi.fn();
+    vi.stubGlobal("location", { replace, origin: "http://localhost:3000" });
     mockFetch({ "GET /me": () => errorResponse(401, "unauthorized", "Session expired") });
     await expect(call(client.GET("/me"))).rejects.toMatchObject({ status: 401 });
-    expect(assign).toHaveBeenCalledWith("/login");
+    expect(replace).toHaveBeenCalledWith("/login");
   });
 });
 

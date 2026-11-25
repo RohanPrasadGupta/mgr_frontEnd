@@ -45,7 +45,7 @@ export function InvestmentsView() {
           )}
 
           {p!.holdings.length === 0 ? (
-            <Empty>No investments yet. Add an asset (a stock, a SIP fund, SSF…) then record trades or contributions.</Empty>
+            <Empty>No investments yet. Add an asset (a stock, crypto, a SIP or pension fund…) then record trades or contributions.</Empty>
           ) : (
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
               <Card className="overflow-hidden p-0">
@@ -136,10 +136,10 @@ export function AssetDialog({ open, onClose }: { open: boolean; onClose: () => v
         <form onSubmit={submit} className="space-y-3">
           <Field label="Type"><Select value={cls} onChange={(e) => setCls(e.target.value as AssetClass)}>{CLASSES.map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Symbol / short name"><Input name="symbol" required maxLength={30} placeholder={units ? "NABIL" : "NIC-SIP"} autoFocus /></Field>
+            <Field label="Symbol / short name"><Input name="symbol" required maxLength={30} placeholder={units ? "e.g. ACME" : "e.g. GROWTH-SIP"} autoFocus /></Field>
             <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}>{currencies.data?.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}</Select></Field>
           </div>
-          <Field label="Name"><Input name="name" required maxLength={100} placeholder={units ? "Nabil Bank Ltd." : "NIC Asia Growth Fund"} /></Field>
+          <Field label="Name"><Input name="name" required maxLength={100} placeholder={units ? "e.g. Acme Corporation" : "e.g. Example Growth Fund"} /></Field>
           {units ? (
             <Field label="Cost method" hint="Weighted average is the default. “Selected buys” uses only buys you flag for the displayed average (your v1 “Use for avg”).">
               <Select name="costMethod" defaultValue="wavg"><option value="wavg">Weighted average</option><option value="fifo">FIFO</option><option value="manual">Selected buys (manual)</option></Select>

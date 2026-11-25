@@ -1,6 +1,7 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useResetOn } from "@/lib/use-reset";
 import { call, client, uploadAttachment } from "@/lib/api/client";
 import { invalidateLedger, useAccounts, useCategories, useMe, useMutate } from "@/lib/api/hooks";
 import type { Body, Transaction } from "@/lib/api/types";
@@ -9,6 +10,8 @@ import { Button, ErrorNote, Field, Input, Modal, Segmented, Select } from "./ui"
 import { useConfirm } from "./feedback";
 import { AttachmentsPanel, PendingAttachments } from "./attachments-panel";
 import { TagPicker } from "./tag-picker";
+import { FxField } from "./fx-field";
+import { rememberFxRate } from "@/lib/fx-memory";
 import { toast } from "@/lib/toast";
 
 const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -24,7 +27,7 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
 
   const [kind, setKind] = useState<"income" | "expense">("expense");
   const [amount, setAmount] = useState("");
-  const [accountId, setAccountId] = useState("");
+  const [pickedAccountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [when, setWhen] = useState(localInput(new Date()));
   const [note, setNote] = useState("");
@@ -35,8 +38,7 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
 
   // Reset the fields when the dialog opens (or switches to another transaction) — never when background data refreshes,
   // which would wipe what the user is typing.
-  useEffect(() => {
-    if (!open) return;
+  useResetOn(open ? (tx?.id ?? "new") : null, () => {
     setError(null);
     if (tx) {
       setKind(tx.kind === "income" ? "income" : "expense");
@@ -49,15 +51,10 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
     } else {
       setKind("expense"); setAmount(""); setCategoryId(""); setWhen(localInput(new Date())); setNote(""); setFx(""); setAccountId(""); setTagIds([]); setFiles([]);
     }
-  }, [open, tx]);
+  });
 
-  // New transactions default to the first active account as soon as accounts are available.
-  useEffect(() => {
-    if (!open || tx || accountId) return;
-    const first = accounts.data?.find((a) => !a.archived)?.id;
-    if (first) setAccountId(first);
-  }, [open, tx, accountId, accounts.data]);
-
+  // A new transaction uses the first active account until the user picks one (accounts may load after the dialog opens).
+  const accountId = pickedAccountId || (tx ? "" : (accounts.data?.find((a) => !a.archived)?.id ?? ""));
   const account = accounts.data?.find((a) => a.id === accountId);
   const cats = useMemo(() => (categories.data ?? []).filter((c) => c.kind === kind && !c.archived), [categories.data, kind]);
   const foreign = !!account && !!me && account.currency !== me.baseCurrency && !editing;
@@ -72,6 +69,8 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
       return call(client.PATCH("/transactions/{id}", { params: { path: { id: tx!.id } }, body }));
     }
     if (!account) throw new Error("Choose an account");
+    if (fx && !(Number(fx) > 0)) throw new Error("Enter a valid exchange rate or leave it empty");
+    if (fx && me) rememberFxRate(account.currency, me.baseCurrency, Number(fx));
     return call(client.POST("/transactions", { body: { accountId, kind, amountMinor: toMinor(major, account.currency), categoryId: categoryId || undefined, occurredAt, note: note || undefined, fxRate: fx ? Number(fx) : undefined, clientId: crypto.randomUUID(), tagIds } }));
   }, invalidateLedger, editing ? (transfer ? "Transfer updated" : "Transaction updated") : "Transaction added");
   const del = useMutate(() => call(client.DELETE("/transactions/{id}", { params: { path: { id: tx!.id } } })), invalidateLedger, transfer ? "Transfer deleted" : "Transaction deleted");
@@ -109,7 +108,7 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
             </Select>
           </Field>
         )}
-        {foreign && <Field label={`FX rate ${account!.currency} → ${me!.baseCurrency}`} hint="Leave empty to use the stored daily rate"><Input type="number" step="any" min="0" value={fx} onChange={(e) => setFx(e.target.value)} /></Field>}
+        {foreign && <FxField from={account!.currency} to={me!.baseCurrency} date={when.slice(0, 10)} value={fx} onChange={setFx} amount={Number(amount)} />}
         {!transfer && (
           <Field label="Category">
             <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>

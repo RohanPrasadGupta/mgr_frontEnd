@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
 import type { Body } from "@/lib/api/types";
 import { qk, useCurrencies, useMe, useMutate } from "@/lib/api/hooks";
@@ -11,16 +12,20 @@ import { useConfirm } from "./feedback";
 type Theme = "system" | "light" | "dark";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+const themeListeners = new Set<() => void>();
+const subscribeTheme = (l: () => void) => { themeListeners.add(l); return () => { themeListeners.delete(l); }; };
+const readTheme = (): Theme => { try { const t = localStorage.getItem("mm_theme"); return t === "light" || t === "dark" ? t : "system"; } catch { return "system"; } };
 function applyTheme(t: Theme) {
   try { if (t === "system") localStorage.removeItem("mm_theme"); else localStorage.setItem("mm_theme", t); } catch { /* storage blocked: still apply for this visit */ }
   if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  themeListeners.forEach((l) => l());
 }
 
 export function SettingsView() {
   const confirm = useConfirm();
   const { data: me, isPending, error } = useMe();
   const currencies = useCurrencies();
-  const [theme, setTheme] = useState<Theme>("system");
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system" as Theme); // saved choice; "system" on the server
   const [name, setName] = useState("");
   const [baseCurrency, setBaseCurrency] = useState("");
   const [timezone, setTimezone] = useState("");
@@ -28,15 +33,16 @@ export function SettingsView() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { try { const t = localStorage.getItem("mm_theme"); if (t === "light" || t === "dark") setTheme(t); } catch { /* ignore */ } }, []);
-  useEffect(() => { if (me) { setName(me.name); setBaseCurrency(me.baseCurrency); setTimezone(me.timezone); setWeekStart(me.weekStart); } }, [me]);
+  // Fill the form from the profile when it loads or changes after a save.
+  useResetOn(me ? `${me.name}|${me.baseCurrency}|${me.timezone}|${me.weekStart}` : null, () => { setName(me!.name); setBaseCurrency(me!.baseCurrency); setTimezone(me!.timezone); setWeekStart(me!.weekStart); });
 
+  const myZone = me?.timezone;
   const zones = useMemo(() => {
     const list: string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
     const set = new Set(["UTC", ...list]);
-    if (me?.timezone) set.add(me.timezone);
+    if (myZone) set.add(myZone); // keep the saved zone selectable even if this browser doesn't list it
     return [...set].sort();
-  }, [me?.timezone]);
+  }, [myZone]);
 
   const save = useMutate((body: Body<"/me", "patch">) => call(client.PATCH("/me", { body })), (qc) => qc.invalidateQueries({ queryKey: qk.me }), "Settings saved");
 
@@ -61,7 +67,7 @@ export function SettingsView() {
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold">Appearance</h2>
-        <Segmented value={theme} onChange={(t) => { setTheme(t); applyTheme(t); }} options={[{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
+        <Segmented value={theme} onChange={applyTheme} options={[{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
       </Card>
 
       <Card>

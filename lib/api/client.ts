@@ -8,7 +8,7 @@ export class ApiError extends Error {
 /** Same-origin fetch: unauthorised responses send the user to /login, everything is uncached. */
 async function gatewayFetch(input: Request): Promise<Response> {
   const res = await fetch(input, { cache: "no-store" });
-  if (res.status === 401 && typeof window !== "undefined") window.location.assign("/login");
+  if (res.status === 401 && typeof window !== "undefined") window.location.replace("/login"); // full reload drops every cached query of the expired session
   return res;
 }
 

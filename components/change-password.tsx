@@ -1,10 +1,12 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authCall, call, client } from "@/lib/api/client";
 import { useMe, useMutate } from "@/lib/api/hooks";
 import { Button, Card, ErrorNote, Field, Input } from "./ui";
 
 export function ChangePasswordCard() {
+  const router = useRouter();
   const { data: me } = useMe();
   const [error, setError] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
@@ -18,7 +20,7 @@ export function ChangePasswordCard() {
     try {
       await save.mutateAsync({ currentPassword, newPassword });
       // The change revokes every session, this one included: sign straight back in so this tab keeps working.
-      if (me) await authCall("login", { email: me.email, password: newPassword }).catch(() => window.location.assign("/login"));
+      if (me) await authCall("login", { email: me.email, password: newPassword }).catch(() => router.replace("/login"));
       setFormKey((k) => k + 1);
     } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }

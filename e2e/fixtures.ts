@@ -6,7 +6,7 @@ export interface TestUser { email: string; password: string; name: string }
 
 /** The run's shared user (created in global-setup; the browser context starts signed in as them). */
 export const test = base.extend<{ user: TestUser }>({
-  user: async ({}, use) => { await use(JSON.parse(readFileSync(USER_FILE, "utf8"))); },
+  user: async ({}, provide) => { await provide(JSON.parse(readFileSync(USER_FILE, "utf8"))); },
 });
 export { expect };
 

@@ -33,16 +33,16 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   }), []);
   const answer = (v: boolean) => { resolver.current?.(v); resolver.current = null; setDlg((d) => (d ? { ...d, open: false } : d)); };
 
-  // ── snackbar queue (one at a time, newest waits its turn so none are lost) ──
+  // ── snackbar queue: the head is on screen, the rest wait their turn so none are lost ──
   const [queue, setQueue] = useState<ToastItem[]>([]);
-  const [current, setCurrent] = useState<ToastItem | null>(null);
-  const [open, setOpen] = useState(false);
+  const [showing, setShowing] = useState(true); // false while the head animates out
   const seq = useRef(0);
   useEffect(() => toast.subscribe((kind, message) => setQueue((q) => (q.some((t) => t.message === message && t.kind === kind) ? q : [...q, { id: ++seq.current, kind, message }]))), []);
-  useEffect(() => {
-    if (queue.length && !current) { setCurrent(queue[0]!); setQueue((q) => q.slice(1)); setOpen(true); }
-    else if (queue.length && current && open) setOpen(false); // hurry the visible one along when more are waiting
-  }, [queue, current, open]);
+  const current = queue[0] ?? null;
+  const open = !!current && showing;
+  // With more waiting, the visible one steps aside sooner.
+  const hideAfter = queue.length > 1 ? 1500 : current?.kind === "error" ? 7000 : 3500;
+  const next = () => { setQueue((q) => q.slice(1)); setShowing(true); };
 
   const value = useMemo(() => confirm, [confirm]);
   return (
@@ -56,9 +56,9 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
           <Button onClick={() => answer(true)} variant="contained" color={dlg?.destructive ? "error" : "primary"} autoFocus>{dlg?.confirmLabel ?? (dlg?.destructive ? "Delete" : "Confirm")}</Button>
         </DialogActions>
       </Dialog>
-      <Snackbar key={current?.id} open={open} autoHideDuration={current?.kind === "error" ? 7000 : 3500} onClose={(_, reason) => { if (reason !== "clickaway") setOpen(false); }}
-        slotProps={{ transition: { onExited: () => setCurrent(null) } }} anchorOrigin={{ vertical: "bottom", horizontal: "center" }} sx={{ bottom: { xs: 88, md: 24 } }}>
-        <Alert variant="filled" severity={current?.kind ?? "info"} onClose={() => setOpen(false)} role={current?.kind === "error" ? "alert" : "status"} sx={{ width: "100%", maxWidth: 520 }}>{current?.message}</Alert>
+      <Snackbar key={current?.id} open={open} autoHideDuration={hideAfter} onClose={(_, reason) => { if (reason !== "clickaway") setShowing(false); }}
+        slotProps={{ transition: { onExited: next } }} anchorOrigin={{ vertical: "bottom", horizontal: "center" }} sx={{ bottom: { xs: 88, md: 24 } }}>
+        <Alert variant="filled" severity={current?.kind ?? "info"} onClose={() => setShowing(false)} role={current?.kind === "error" ? "alert" : "status"} sx={{ width: "100%", maxWidth: 520 }}>{current?.message}</Alert>
       </Snackbar>
     </Ctx.Provider>
   );

@@ -59,12 +59,12 @@ describe("TransferDialog", () => {
   it("shows the FX field only when exactly one side is outside the base currency", async () => {
     mockFetch(routes());
     await open();
-    expect(screen.queryByLabelText(/FX rate to/)).not.toBeInTheDocument(); // THB → THB
+    expect(screen.queryByLabelText(/Exchange rate/)).not.toBeInTheDocument(); // THB → THB
     await pick("To", npr.id);
-    expect(await screen.findByLabelText(/FX rate to THB/)).toBeInTheDocument(); // THB → NPR
+    expect(await screen.findByLabelText(/Exchange rate NPR → THB/)).toBeInTheDocument(); // THB → NPR
     await pick("From", usd.id);
     await pick("To", npr.id);
-    await waitFor(() => expect(screen.queryByLabelText(/FX rate to/)).not.toBeInTheDocument()); // USD → NPR: both foreign
+    await waitFor(() => expect(screen.queryByLabelText(/Exchange rate/)).not.toBeInTheDocument()); // USD → NPR: both foreign
   });
 
   it("warns (without blocking) when the amount exceeds the balance", async () => {
