@@ -56,7 +56,7 @@ export function TransferDialog({ open, onClose, defaultFrom }: { open: boolean; 
       if (!(toAmountMinor > 0)) throw new Error(`Enter how much ${to.currency} arrives`);
     }
     return call(client.POST("/transfers", { body: { fromAccountId: from.id, toAccountId: to.id, amountMinor, toAmountMinor, occurredAt: new Date(when).toISOString(), note: note.trim() || undefined, fxRate: showFx && fx ? Number(fx) : undefined } }));
-  }, invalidateLedger);
+  }, invalidateLedger, "Transfer completed");
 
   async function submit(e: React.FormEvent) { e.preventDefault(); setError(null); try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
   const opt = (a: (typeof active)[number]) => <option key={a.id} value={a.id}>{a.name} ({a.currency}) · {formatMoney(a.balanceMinor, a.currency)}</option>;

@@ -33,27 +33,53 @@ describe("AppShell", () => {
     expect(within(side!).getByRole("link", { name: /Budgets/ })).not.toHaveAttribute("aria-current");
   });
 
-  it("keeps four primary tabs on mobile and puts the rest behind a More menu", async () => {
-    nav.path = "/accounts";
+  it("has a sidebar burger that toggles icons-only ↔ icons + labels, and remembers the choice", async () => {
+    mockFetch(baseRoutes);
+    const { unmount } = renderWithClient(<AppShell>x</AppShell>);
+    const side = document.querySelector("aside")!;
+    expect(side).toHaveAttribute("data-collapsed", "false");
+    expect(within(side).getByText("Transactions")).toBeVisible();
+    await userEvent.click(within(side).getByRole("button", { name: "Collapse sidebar" }));
+    expect(side).toHaveAttribute("data-collapsed", "true");
+    expect(within(side).queryByText("Transactions")).not.toBeInTheDocument(); // label gone…
+    expect(within(side).getByRole("link", { name: "Transactions" })).toBeInTheDocument(); // …but still named for assistive tech
+    expect(localStorage.getItem("mm_nav")).toBe("1");
+    unmount();
+    renderWithClient(<AppShell>x</AppShell>);
+    await vi.waitFor(() => expect(document.querySelector("aside")).toHaveAttribute("data-collapsed", "true"));
+    await userEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(localStorage.getItem("mm_nav")).toBe("0");
+  });
+
+  it("keeps the sidebar pinned (sticky, full height) so it doesn't scroll with the page", () => {
     mockFetch(baseRoutes);
     renderWithClient(<AppShell>x</AppShell>);
-    const bar = screen.getAllByRole("navigation", { name: "Main" })[1]!;
-    expect(within(bar).getAllByRole("link").map((l) => l.textContent)).toEqual(["▦Home", "⇅Activity", "◔Budgets", "↗Invest"]);
-    const more = within(bar).getByRole("button", { name: /More/ });
-    expect(more).toHaveClass("text-primary"); // the current page (Accounts) lives under More
-    expect(more).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(more);
-    expect(more).toHaveAttribute("aria-expanded", "true");
-    const menuLinks = screen.getAllByRole("link", { name: /Recurring|Accounts|Categories|Import|Settings|Transfers/ }).filter((l) => l.closest("div.fixed"));
-    expect(menuLinks.map((l) => l.textContent!.replace(/^\W+/, ""))).toEqual(["Transfers", "Recurring", "Accounts", "Categories", "Import & export", "Settings"]);
-    await userEvent.click(more);
-    expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector("aside")).toHaveClass("sticky", "top-0", "h-screen");
+  });
+
+  it("on small screens: a burger opens a drawer with every page, and a speed dial offers quick actions", async () => {
+    mockFetch(baseRoutes);
+    renderWithClient(<AppShell>x</AppShell>);
+    await userEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const drawer = await screen.findByRole("presentation");
+    const links = within(drawer).getAllByRole("link").map((l) => l.textContent);
+    expect(links).toEqual(["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Recurring", "Accounts", "Categories", "Import & export", "Settings"]);
+    await userEvent.click(within(drawer).getByRole("button", { name: "Close menu" }));
+
+    await vi.waitFor(() => expect(document.querySelector(".MuiDrawer-root")).toBeNull()); // modal un-hides the page when it has left
+    const dial = await screen.findByRole("button", { name: "Quick actions" });
+    await userEvent.click(dial);
+    for (const n of ["Add transaction", "New transfer", "Dashboard", "Transactions", "Budgets", "Investments", "All pages"]) {
+      expect(await screen.findByRole("menuitem", { name: n })).toBeInTheDocument();
+    }
+    await userEvent.setup({ pointerEventsCheck: 0 }).click(screen.getByRole("menuitem", { name: "Add transaction" })); // jsdom never finishes the dial's open transition
+    expect(await screen.findByRole("dialog", { name: "Add transaction" })).toBeInTheDocument();
   });
 
   it("signs out through the gateway and returns to /login", async () => {
     const m = mockFetch({ ...baseRoutes, "POST /api/auth/logout": null });
     renderWithClient(<AppShell>x</AppShell>);
-    await userEvent.click(screen.getAllByRole("button", { name: "Sign out" })[0]!);
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(m.last("POST", "/api/auth/logout")).toBeDefined();
     await vi.waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/login"));
   });

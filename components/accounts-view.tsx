@@ -6,22 +6,25 @@ import type { Account, AccountType, Body } from "@/lib/api/types";
 import { formatMoney, toMinor } from "@/lib/money";
 import { TransferDialog } from "./transfer-dialog";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { useConfirm } from "./feedback";
 
 const TYPES: AccountType[] = ["cash", "bank", "wallet", "card", "loan", "investment"];
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalidateQueries({ queryKey: qk.accounts });
 
 export function AccountsView() {
+  const confirm = useConfirm();
   const accounts = useAccounts();
   const currencies = useCurrencies();
   const { data: me } = useMe();
   const [open, setOpen] = useState(false);
   const [transferFrom, setTransferFrom] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [type, setType] = useState<AccountType>("bank");
 
-  const create = useMutate((body: Body<"/accounts", "post">) => call(client.POST("/accounts", { body })), refresh);
-  const update = useMutate(({ id, body }: { id: string; body: Body<"/accounts/{id}", "patch"> }) => call(client.PATCH("/accounts/{id}", { params: { path: { id } }, body })), refresh);
-  const remove = useMutate((id: string) => call(client.DELETE("/accounts/{id}", { params: { path: { id } } })), refresh);
+  const create = useMutate((body: Body<"/accounts", "post">) => call(client.POST("/accounts", { body })), refresh, "Account added");
+  const update = useMutate(({ id, body }: { id: string; body: Body<"/accounts/{id}", "patch"> }) => call(client.PATCH("/accounts/{id}", { params: { path: { id } }, body })), refresh, "Account updated");
+  const remove = useMutate((id: string) => call(client.DELETE("/accounts/{id}", { params: { path: { id } } })), refresh, "Account deleted");
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,7 +36,7 @@ export function AccountsView() {
       setOpen(false);
     } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
-  async function act(fn: () => Promise<unknown>) { try { await fn(); } catch (err) { alert(err instanceof Error ? err.message : "Failed"); } }
+  async function act(fn: () => Promise<unknown>) { setActionError(null); try { await fn(); } catch (err) { setActionError(err instanceof Error ? err.message : "Something went wrong"); } }
 
   const visible = accounts.data ?? [];
   return (
@@ -45,6 +48,7 @@ export function AccountsView() {
           <Button onClick={() => { setError(null); setType("bank"); setOpen(true); }}>+ Add account</Button>
         </div>
       </div>
+      {actionError && <ErrorNote error={new Error(actionError)} />}
       {accounts.isPending ? <Skeleton className="h-40" /> : accounts.error ? <ErrorNote error={accounts.error} retry={() => accounts.refetch()} /> : visible.length === 0 ? <Empty>No accounts yet.</Empty> : (
         <div className="grid gap-3 sm:grid-cols-2">
           {visible.map((a: Account) => (
@@ -56,7 +60,7 @@ export function AccountsView() {
               <div className="mt-3 flex gap-3 text-xs text-muted">
                 {!a.archived && <button className="underline" onClick={() => setTransferFrom(a.id)}>Transfer</button>}
                 <button className="underline" onClick={() => act(() => update.mutateAsync({ id: a.id, body: { archived: !a.archived } }))}>{a.archived ? "Unarchive" : "Archive"}</button>
-                <button className="underline hover:text-expense" onClick={() => confirm(`Delete "${a.name}"? Accounts with transactions can only be archived.`) && act(() => remove.mutateAsync(a.id))}>Delete</button>
+                <button className="underline hover:text-expense" onClick={async () => (await confirm({ message: `Delete "${a.name}"? Accounts with transactions can only be archived.`, destructive: true })) && act(() => remove.mutateAsync(a.id))}>Delete</button>
               </div>
             </Card>
           ))}

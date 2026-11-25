@@ -33,17 +33,17 @@ export function SipCalculator() {
       <Link href="/investments" className="text-sm text-primary underline">← Investments</Link>
       <h1 className="text-2xl font-semibold">SIP calculator</h1>
       <p className="text-sm text-muted">Projects a monthly investment growing at a fixed annual return, with each instalment invested at the start of the month.</p>
-      <Card className="grid gap-3 sm:grid-cols-3">
+      <Card className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field label={`Monthly amount (${cur})`}><Input type="number" min="0" step="any" value={monthly} onChange={(e) => setMonthly(e.target.value)} /></Field>
         <Field label="Expected return (% per year)"><Input type="number" min="0" max="100" step="any" value={rate} onChange={(e) => setRate(e.target.value)} /></Field>
         <Field label="Years"><Input type="number" min="1" max="80" step="any" value={years} onChange={(e) => setYears(e.target.value)} /></Field>
       </Card>
       {!valid ? <p className="text-sm text-muted">Enter a monthly amount above 0, a rate between 0 and 100, and 1–80 years.</p> : calc.error ? <ErrorNote error={calc.error} /> : !d ? <Skeleton className="h-64" /> : (
         <>
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Result">
-            <Card><div className="text-xs text-muted">Total invested</div><div className="mt-1 text-xl font-semibold tabular-nums">{money(d.totalInvested)}</div></Card>
-            <Card><div className="text-xs text-muted">Estimated returns</div><div className="mt-1 text-xl font-semibold tabular-nums text-income">{money(d.estimatedReturns)}</div></Card>
-            <Card><div className="text-xs text-muted">Maturity value</div><div className="mt-1 text-xl font-semibold tabular-nums">{money(d.maturityValue)}</div></Card>
+          <section className="grid grid-cols-1 gap-3 lg:grid-cols-3" aria-label="Result">
+            <Card><div className="text-xs text-muted">Total invested</div><div className="mt-1 break-words text-xl font-semibold tabular-nums">{money(d.totalInvested)}</div></Card>
+            <Card><div className="text-xs text-muted">Estimated returns</div><div className="mt-1 break-words text-xl font-semibold tabular-nums text-income">{money(d.estimatedReturns)}</div></Card>
+            <Card><div className="text-xs text-muted">Maturity value</div><div className="mt-1 break-words text-xl font-semibold tabular-nums">{money(d.maturityValue)}</div></Card>
           </section>
           <Card>
             <h2 className="mb-2 text-sm font-semibold">Invested vs returns by year</h2>

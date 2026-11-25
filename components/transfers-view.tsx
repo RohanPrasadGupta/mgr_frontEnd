@@ -24,7 +24,7 @@ export function TransfersView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Transfers</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => setYm({ year, month })} />
           <Button onClick={() => setAdding(true)}>+ New transfer</Button>
         </div>

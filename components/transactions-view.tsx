@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useAccounts, useCategories, useMe, useTransactions } from "@/lib/api/hooks";
+import { call, client } from "@/lib/api/client";
+import { invalidateLedger, useAccounts, useCategories, useMe, useMutate, useTransactions } from "@/lib/api/hooks";
 import type { Transaction } from "@/lib/api/types";
 import { formatMoney, monthRange } from "@/lib/money";
+import { toast } from "@/lib/toast";
+import { useConfirm } from "./feedback";
 import { MonthPicker } from "./month-picker";
 import { TransactionForm } from "./transaction-form";
 import { TransactionRow } from "./transaction-row";
@@ -19,6 +22,13 @@ export function TransactionsView() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [adding, setAdding] = useState(false);
+  const confirm = useConfirm();
+  const del = useMutate((t: Transaction) => call(client.DELETE("/transactions/{id}", { params: { path: { id: t.id } } })), invalidateLedger);
+  async function remove(t: Transaction) {
+    const transfer = t.kind === "transfer_in" || t.kind === "transfer_out";
+    if (!(await confirm({ title: transfer ? "Delete transfer?" : "Delete transaction?", message: transfer ? "Both sides of this transfer will be removed and balances restored." : "This removes the transaction and updates your balances and reports.", destructive: true }))) return;
+    try { await del.mutateAsync(t); toast.success(transfer ? "Transfer deleted" : "Transaction deleted"); } catch { /* the failure toast is raised centrally */ }
+  }
 
   useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 300); return () => clearTimeout(t); }, [search]);
 
@@ -44,7 +54,7 @@ export function TransactionsView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Transactions</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => setYm({ year, month })} />
           <Button onClick={() => setAdding(true)}>+ Add</Button>
         </div>
@@ -70,7 +80,7 @@ export function TransactionsView() {
                 <span className="tabular-nums">{d.income > 0 && <span className="text-income">+{formatMoney(d.income, base)} </span>}{d.expense > 0 && <span className="text-expense">−{formatMoney(d.expense, base)}</span>}</span>
               </div>
               <ul className="divide-y divide-border">
-                {d.items.map((t) => <TransactionRow key={t.id} tx={t} categories={categories.data} accounts={accounts.data} baseCurrency={base} onClick={() => setEditing(t)} />)}
+                {d.items.map((t) => <TransactionRow key={t.id} tx={t} categories={categories.data} accounts={accounts.data} baseCurrency={base} onEdit={() => setEditing(t)} onDelete={() => void remove(t)} busy={del.isPending} />)}
               </ul>
             </Card>
           ))}

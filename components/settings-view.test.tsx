@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { baseRoutes } from "@/test/fixtures";
@@ -37,17 +37,18 @@ describe("SettingsView", () => {
 
   it("warns about a base-currency change and sends nothing if the user declines", async () => {
     const m = mockFetch({ ...baseRoutes, "PATCH /me": { data: {} } });
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirm);
     renderWithClient(<SettingsView />);
     await ready();
     await userEvent.selectOptions(await screen.findByLabelText(/Base currency/), "NPR");
     expect(screen.getByRole("alert")).toHaveTextContent(/does not convert your existing transactions/);
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("NPR"));
-    expect(m.last("PATCH", "/me")).toBeUndefined();
-    confirm.mockReturnValue(true);
+    const dlg = await screen.findByRole("dialog", { name: "Change base currency?" });
+    expect(dlg).toHaveTextContent(/NPR/);
+    await userEvent.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(m.last("PATCH", "/me")).toBeUndefined(); // declined → nothing sent
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Change currency" }));
     await waitFor(() => expect(m.last("PATCH", "/me")!.body.baseCurrency).toBe("NPR"));
   });
 

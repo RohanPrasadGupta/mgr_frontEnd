@@ -118,7 +118,7 @@ export function AssetDialog({ open, onClose }: { open: boolean; onClose: () => v
   const currencies = useCurrencies();
   const [cls, setCls] = useState<AssetClass>("stock");
   const [error, setError] = useState<string | null>(null);
-  const create = useMutate((body: Body<"/investments/assets", "post">) => call(client.POST("/investments/assets", { body })), invalidateInvestments);
+  const create = useMutate((body: Body<"/investments/assets", "post">) => call(client.POST("/investments/assets", { body })), invalidateInvestments, "Asset added");
   const units = defaultTracking(cls) === "units";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {

@@ -31,8 +31,11 @@ export const useTransactions = (f: TxFilter) =>
     staleTime: 15_000,
   });
 
+/** Newest transaction overall (used to open the dashboard on a month that actually has data). */
+export const useLatestTransaction = () => useQuery({ queryKey: ["transactions", "latest"] as const, queryFn: async () => (await call(client.GET("/transactions", { params: { query: { limit: 1 } } }))).data[0] ?? null, staleTime: 60_000 });
 export const useSummary = (from: string, to: string) => useQuery({ queryKey: qk.insights("summary", { from, to }), queryFn: async () => (await call(client.GET("/insights/summary", { params: { query: { from, to } } }))).data, staleTime: 30_000 });
 export const useByCategory = (from: string, to: string, kind: "income" | "expense") => useQuery({ queryKey: qk.insights("by-category", { from, to, kind }), queryFn: async () => (await call(client.GET("/insights/by-category", { params: { query: { from, to, kind } } }))).data, staleTime: 30_000 });
+export const useDaily = (from: string, to: string) => useQuery({ queryKey: qk.insights("daily", { from, to }), queryFn: async () => (await call(client.GET("/insights/daily", { params: { query: { from, to } } }))).data, staleTime: 30_000 });
 export const useTrend = (year: number) => useQuery({ queryKey: qk.insights("trend", { year }), queryFn: async () => (await call(client.GET("/insights/trend", { params: { query: { year } } }))).data, staleTime: 30_000 });
 
 /** `date` omitted = today in the user's timezone (decided by the API). */
@@ -50,9 +53,10 @@ export const invalidateLedger = (qc: QueryClient) => Promise.all(["transactions"
 export const invalidateBudgets = (qc: QueryClient) => qc.invalidateQueries({ queryKey: ["budgets"] });
 export const invalidateRecurring = (qc: QueryClient) => qc.invalidateQueries({ queryKey: ["recurring"] });
 
-export function useMutate<TVars, TOut = unknown>(fn: (v: TVars) => Promise<TOut>, invalidate: (qc: QueryClient) => Promise<unknown>) {
+/** `success` is shown as a toast when the write succeeds; failures always toast (see Providers' MutationCache). */
+export function useMutate<TVars, TOut = unknown>(fn: (v: TVars) => Promise<TOut>, invalidate: (qc: QueryClient) => Promise<unknown>, success?: string) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => invalidate(qc) });
+  return useMutation({ mutationFn: fn, onSuccess: () => invalidate(qc), meta: { success } });
 }
 
 export interface TransferPair { groupId: string; out: Transaction; in: Transaction | null }

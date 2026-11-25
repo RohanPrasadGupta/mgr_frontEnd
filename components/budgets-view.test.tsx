@@ -76,8 +76,10 @@ describe("BudgetsView", () => {
     await waitFor(() => expect(m.last("PATCH", "/budgets/b1")).toBeDefined());
     expect(m.last("PATCH", "/budgets/b1")!.body).toEqual({ amountMinor: 70_000, alertThresholdPct: 80 });
 
-    vi.stubGlobal("confirm", vi.fn(() => true));
     await userEvent.click(within(await screen.findByRole("progressbar").then((p) => p.closest("div[class*='rounded-2xl']") as HTMLElement)).getByRole("button", { name: "Delete" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(dlg).toHaveTextContent(/Delete the .* budget\?/);
+    await userEvent.click(within(dlg).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(m.last("DELETE", "/budgets/b1")).toBeDefined());
   });
 

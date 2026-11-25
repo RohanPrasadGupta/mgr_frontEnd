@@ -26,7 +26,15 @@ type Result<T> = { data?: T; error?: unknown; response: Response };
 
 /** Unwraps a client result: returns the body, or throws an ApiError carrying the API's code/message/details. */
 export async function call<T>(result: Promise<Result<T>>): Promise<T> {
-  const { data, error, response } = await result;
+  let r: Result<T>;
+  try {
+    r = await result;
+  } catch {
+    // fetch() itself rejected: no connection, DNS failure, aborted… There is no HTTP response to read.
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    throw new ApiError(0, "network_error", offline ? "You're offline. Check your connection and try again." : "Can't reach the server. Please try again in a moment.");
+  }
+  const { data, error, response } = r;
   if (error !== undefined || !response.ok) {
     const e = (error as { error?: { code?: string; message?: string; details?: unknown } } | undefined)?.error;
     throw new ApiError(response.status, e?.code ?? "error", e?.message ?? `Request failed (${response.status})`, e?.details);
@@ -35,7 +43,12 @@ export async function call<T>(result: Promise<Result<T>>): Promise<T> {
 }
 
 export async function authCall(kind: "login" | "register", body: unknown) {
-  const res = await fetch(`/api/auth/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  let res: Response;
+  try {
+    res = await fetch(`/api/auth/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    throw new ApiError(0, "network_error", "Can't reach the server. Please try again in a moment.");
+  }
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, json?.error?.code ?? "error", json?.error?.message ?? "Request failed", json?.error?.details);
   return json.data.user;

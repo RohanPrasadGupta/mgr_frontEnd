@@ -5,6 +5,7 @@ import { invalidateLedger, invalidateRecurring, useAccounts, useCategories, useR
 import type { Body, Frequency, RecurringRule } from "@/lib/api/types";
 import { formatMoney, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Segmented, Select, Skeleton, cx } from "./ui";
+import { useConfirm } from "./feedback";
 
 const UNIT: Record<Frequency, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year" };
 export const freqLabel = (f: Frequency, n: number) => (n === 1 ? `Every ${UNIT[f]}` : `Every ${n} ${UNIT[f]}s`);
@@ -12,18 +13,20 @@ const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en",
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => Promise.all([invalidateRecurring(qc), invalidateLedger(qc)]);
 
 export function RecurringView() {
+  const confirm = useConfirm();
   const rules = useRecurring();
   const accounts = useAccounts();
   const categories = useCategories();
   const [dialog, setDialog] = useState<{ edit?: RecurringRule } | null>(null);
   const [report, setReport] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const patch = useMutate(({ id, body }: { id: string; body: Body<"/recurring/{id}", "patch"> }) => call(client.PATCH("/recurring/{id}", { params: { path: { id } }, body })), refresh);
-  const remove = useMutate((id: string) => call(client.DELETE("/recurring/{id}", { params: { path: { id } } })), refresh);
-  const runDue = useMutate(() => call(client.POST("/recurring/run-due")), refresh);
+  const patch = useMutate(({ id, body }: { id: string; body: Body<"/recurring/{id}", "patch"> }) => call(client.PATCH("/recurring/{id}", { params: { path: { id } }, body })), refresh, "Rule updated");
+  const remove = useMutate((id: string) => call(client.DELETE("/recurring/{id}", { params: { path: { id } } })), refresh, "Rule deleted");
+  const runDue = useMutate(() => call(client.POST("/recurring/run-due")), refresh, "Due rules processed");
 
   const sorted = useMemo(() => [...(rules.data ?? [])].sort((a, b) => Number(b.active) - Number(a.active) || a.nextRunOn.localeCompare(b.nextRunOn)), [rules.data]);
-  const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { alert(e instanceof Error ? e.message : "Failed"); } };
+  const act = async (fn: () => Promise<unknown>) => { setActionError(null); try { await fn(); } catch (e) { setActionError(e instanceof Error ? e.message : "Something went wrong"); } };
 
   async function runNow() {
     setReport(null);
@@ -43,6 +46,7 @@ export function RecurringView() {
         </div>
       </div>
       <p className="text-sm text-muted">Rules post automatically every 15 minutes while the server is running. Missed dates are never duplicated.</p>
+      {actionError && <ErrorNote error={new Error(actionError)} />}
       {report && <div role="status" className="rounded-xl border border-border bg-card p-3 text-sm">{report}</div>}
 
       {rules.isPending ? <Skeleton className="h-48" /> : rules.error ? <ErrorNote error={rules.error} retry={() => rules.refetch()} /> : sorted.length === 0 ? (
@@ -70,7 +74,7 @@ export function RecurringView() {
                 <div className="mt-3 flex gap-3 text-xs text-muted">
                   <button className="underline" onClick={() => act(() => patch.mutateAsync({ id: r.id, body: { active: !r.active } }))}>{r.active ? "Pause" : "Resume"}</button>
                   <button className="underline" onClick={() => setDialog({ edit: r })}>Edit</button>
-                  <button className="underline hover:text-expense" onClick={() => confirm("Delete this rule? Transactions it already posted are kept.") && act(() => remove.mutateAsync(r.id))}>Delete</button>
+                  <button className="underline hover:text-expense" onClick={async () => (await confirm({ message: "Delete this rule? Transactions it already posted are kept.", destructive: true })) && act(() => remove.mutateAsync(r.id))}>Delete</button>
                 </div>
               </Card>
             );
@@ -93,7 +97,7 @@ function RuleDialog({ state, onClose }: { state: { edit?: RecurringRule } | null
   const [error, setError] = useState<string | null>(null);
   const today = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
   const account = accounts.data?.find((a) => a.id === (edit?.accountId ?? accountId)) ?? accounts.data?.find((a) => !a.archived);
-  const save = useMutate(({ id, body }: { id: string; body: Body<"/recurring/{id}", "patch"> } | { id?: undefined; body: Body<"/recurring", "post"> }) => (id ? call(client.PATCH("/recurring/{id}", { params: { path: { id } }, body: body as Body<"/recurring/{id}", "patch"> })) : call(client.POST("/recurring", { body: body as Body<"/recurring", "post"> }))), refresh);
+  const save = useMutate(({ id, body }: { id: string; body: Body<"/recurring/{id}", "patch"> } | { id?: undefined; body: Body<"/recurring", "post"> }) => (id ? call(client.PATCH("/recurring/{id}", { params: { path: { id } }, body: body as Body<"/recurring/{id}", "patch"> })) : call(client.POST("/recurring", { body: body as Body<"/recurring", "post"> }))), refresh, "Rule saved");
   const pastStart = !edit && !!startOn && startOn < today;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {

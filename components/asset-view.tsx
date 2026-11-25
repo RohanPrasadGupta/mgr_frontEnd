@@ -8,19 +8,22 @@ import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/type
 import { CLASS_LABEL, TYPES_FOR, TYPE_LABEL, isInflow } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { useConfirm } from "./feedback";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const fmtDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function AssetView() {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const holding = useHolding(id);
   const trades = useAssetTrades(id);
   const [dialog, setDialog] = useState<{ trade?: Trade } | null>(null);
-  const patch = useMutate((body: Body<"/investments/assets/{id}", "patch">) => call(client.PATCH("/investments/assets/{id}", { params: { path: { id } }, body })), invalidateInvestments);
-  const remove = useMutate(() => call(client.DELETE("/investments/assets/{id}", { params: { path: { id } } })), invalidateInvestments);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const patch = useMutate((body: Body<"/investments/assets/{id}", "patch">) => call(client.PATCH("/investments/assets/{id}", { params: { path: { id } }, body })), invalidateInvestments, "Asset updated");
+  const remove = useMutate(() => call(client.DELETE("/investments/assets/{id}", { params: { path: { id } } })), invalidateInvestments, "Asset deleted");
 
   if (holding.isPending) return <Skeleton className="h-96" />;
   if (holding.error) return <div className="space-y-3"><Link href="/investments" className="text-sm text-primary underline">← Investments</Link><ErrorNote error={holding.error} retry={() => holding.refetch()} /></div>;
@@ -29,7 +32,7 @@ export function AssetView() {
   const units = a.tracking === "units";
   const cur = a.currency;
 
-  async function act(fn: () => Promise<unknown>) { try { await fn(); } catch (e) { alert(e instanceof Error ? e.message : "Failed"); } }
+  async function act(fn: () => Promise<unknown>) { setActionError(null); try { await fn(); } catch (e) { setActionError(e instanceof Error ? e.message : "Something went wrong"); } }
 
   return (
     <div className="space-y-5">
@@ -64,6 +67,7 @@ export function AssetView() {
         </>)}
       </section>
 
+      {actionError && <ErrorNote error={new Error(actionError)} />}
       <PriceCard h={h} />
 
       <Card>
@@ -96,7 +100,7 @@ export function AssetView() {
           </label>
         )}
         <button className="text-muted underline" onClick={() => act(() => patch.mutateAsync({ archived: !a.archived }))}>{a.archived ? "Unarchive" : "Archive"}</button>
-        <button className="text-muted underline hover:text-expense" onClick={() => confirm(`Delete ${a.symbol}? Assets with trades can only be archived.`) && act(async () => { await remove.mutateAsync(undefined as never); router.replace("/investments"); })}>Delete asset</button>
+        <button className="text-muted underline hover:text-expense" onClick={async () => (await confirm({ message: `Delete ${a.symbol}? Assets with trades can only be archived.`, destructive: true })) && act(async () => { await remove.mutateAsync(undefined as never); router.replace("/investments"); })}>Delete asset</button>
       </Card>
 
       <TradeDialog open={dialog !== null} holding={h} trade={dialog?.trade} onClose={() => setDialog(null)} />
@@ -121,7 +125,7 @@ function PriceCard({ h }: { h: Holding }) {
   const [date, setDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setDate(today()), []);
-  const save = useMutate((body: Body<"/investments/assets/{id}/prices", "post">) => call(client.POST("/investments/assets/{id}/prices", { params: { path: { id: a.id } }, body })), invalidateInvestments);
+  const save = useMutate((body: Body<"/investments/assets/{id}/prices", "post">) => call(client.POST("/investments/assets/{id}/prices", { params: { path: { id: a.id } }, body })), invalidateInvestments, "Price saved");
   const units = a.tracking === "units";
 
   async function submit(e: React.FormEvent) {
@@ -151,6 +155,7 @@ function PriceCard({ h }: { h: Holding }) {
 }
 
 function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding: Holding; trade?: Trade; onClose: () => void }) {
+  const confirm = useConfirm();
   const a = holding.asset;
   const units = a.tracking === "units";
   const options = TYPES_FOR[a.tracking];
@@ -189,11 +194,11 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
     return trade
       ? call(client.PATCH("/investments/trades/{id}", { params: { path: { id: trade.id } }, body }))
       : call(client.POST("/investments/trades", { body: { ...body, note: note || undefined, assetId: a.id, type, clientId: crypto.randomUUID() } }));
-  }, invalidateInvestments);
-  const del = useMutate(() => call(client.DELETE("/investments/trades/{id}", { params: { path: { id: trade!.id } } })), invalidateInvestments);
+  }, invalidateInvestments, trade ? "Entry updated" : "Entry added");
+  const del = useMutate(() => call(client.DELETE("/investments/trades/{id}", { params: { path: { id: trade!.id } } })), invalidateInvestments, "Entry deleted");
 
   async function submit(e: React.FormEvent) { e.preventDefault(); setError(null); try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
-  async function remove() { if (!confirm("Delete this entry?")) return; try { await del.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
+  async function remove() { if (!(await confirm({ message: "Delete this entry?", destructive: true }))) return; try { await del.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
 
   return (
     <Modal open={open} onClose={onClose} title={trade ? `Edit ${TYPE_LABEL[trade.type].toLowerCase()}` : units ? "Add trade" : "Add entry"}>

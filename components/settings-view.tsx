@@ -5,6 +5,7 @@ import type { Body } from "@/lib/api/types";
 import { qk, useCurrencies, useMe, useMutate } from "@/lib/api/hooks";
 import { DeleteAccountCard } from "./delete-account";
 import { Button, Card, ErrorNote, Field, Input, Segmented, Select, Skeleton } from "./ui";
+import { useConfirm } from "./feedback";
 
 type Theme = "system" | "light" | "dark";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -15,6 +16,7 @@ function applyTheme(t: Theme) {
 }
 
 export function SettingsView() {
+  const confirm = useConfirm();
   const { data: me, isPending, error } = useMe();
   const currencies = useCurrencies();
   const [theme, setTheme] = useState<Theme>("system");
@@ -35,7 +37,7 @@ export function SettingsView() {
     return [...set].sort();
   }, [me?.timezone]);
 
-  const save = useMutate((body: Body<"/me", "patch">) => call(client.PATCH("/me", { body })), (qc) => qc.invalidateQueries({ queryKey: qk.me }));
+  const save = useMutate((body: Body<"/me", "patch">) => call(client.PATCH("/me", { body })), (qc) => qc.invalidateQueries({ queryKey: qk.me }), "Settings saved");
 
   if (isPending) return <Skeleton className="h-96" />;
   if (error) return <ErrorNote error={error} />;
@@ -45,7 +47,7 @@ export function SettingsView() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null); setErr(null);
-    if (currencyChanged && !confirm(`Change your base currency to ${baseCurrency}?\n\nTotals, budgets and charts are calculated from amounts stored in the old base currency (${me!.baseCurrency}) for past transactions, so they will mix currencies until those are re-entered. Only change this if you are just starting out.`)) return;
+    if (currencyChanged && !(await confirm({ title: "Change base currency?", confirmLabel: "Change currency", message: `Change your base currency to ${baseCurrency}?\n\nTotals, budgets and charts are calculated from amounts stored in the old base currency (${me!.baseCurrency}) for past transactions, so they will mix currencies until those are re-entered. Only change this if you are just starting out.` }))) return;
     try {
       await save.mutateAsync({ name: name.trim(), baseCurrency, timezone, weekStart });
       setMsg("Saved.");

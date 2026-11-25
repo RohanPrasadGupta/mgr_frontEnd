@@ -286,6 +286,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/insights/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Income and expense per day for a range (zero-filled, max 400 days) */
+        get: operations["getDaily"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/insights/trend": {
         parameters: {
             query?: never;
@@ -711,6 +728,19 @@ export interface components {
             name: string;
             symbol: string;
             minorUnit: number;
+        };
+        Daily: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            baseCurrency: string;
+            days: {
+                /** Format: date */
+                date: string;
+                incomeMinor: number;
+                expenseMinor: number;
+            }[];
         };
         ErrorBody: {
             error: {
@@ -1930,6 +1960,40 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["ByCategory"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getDaily: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Daily"];
                     };
                 };
             };

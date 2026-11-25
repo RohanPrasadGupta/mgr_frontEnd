@@ -1,46 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f7f9;
+  --bg: #f3f2fa;
   --card: #ffffff;
-  --fg: #14161a;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --primary: #2563eb;
+  --fg: #15132b;
+  --muted: #646287;
+  --border: #e3e1f1;
+  --primary: #9333ea;
   --primary-fg: #ffffff;
   --income: #15803d;
   --expense: #dc2626;
-  --warn: #d97706;
-  --ring: rgba(37, 99, 235, 0.35);
+  --warn: #b45309;
+  --ring: rgba(147, 51, 234, 0.35);
+  --c1: #9333ea; --c2: #0891b2; --c3: #d97706; --c4: #059669; --c5: #db2777; --c6: #4f46e5; --c7: #ea580c; --c8: #65a30d;
+  color-scheme: light;
 }
-/* Theme: follows the system unless the user picked one in Settings (data-theme on <html>). */
+/* Theme: follows the system unless the user picked one in Settings (data-theme on <html>).
+   Dark is a deep navy with a violet/cyan accent pair; light keeps the same hues on a soft lavender canvas. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1013;
-    --card: #181b21;
-    --fg: #eceef2;
-    --muted: #9aa3b2;
-    --border: #272c35;
-    --primary: #64a3ff;
-    --primary-fg: #0b1220;
-    --income: #4ade80;
-    --expense: #f87171;
-    --warn: #fbbf24;
-    --ring: rgba(100, 163, 255, 0.4);
+  --bg: #070b22;
+  --card: #0d1434;
+  --fg: #e9edff;
+  --muted: #8e9bc9;
+  --border: #1c2653;
+  --primary: #c85bf5;
+  --primary-fg: #14012a;
+  --income: #34d399;
+  --expense: #fb7185;
+  --warn: #fbbf24;
+  --ring: rgba(200, 91, 245, 0.45);
+  --c1: #c85bf5; --c2: #22c7f5; --c3: #fbbf24; --c4: #34d399; --c5: #f472b6; --c6: #6d8cff; --c7: #fb923c; --c8: #a3e635;
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-    --bg: #0e1013;
-    --card: #181b21;
-    --fg: #eceef2;
-    --muted: #9aa3b2;
-    --border: #272c35;
-    --primary: #64a3ff;
-    --primary-fg: #0b1220;
-    --income: #4ade80;
-    --expense: #f87171;
-    --warn: #fbbf24;
-    --ring: rgba(100, 163, 255, 0.4);
+  --bg: #070b22;
+  --card: #0d1434;
+  --fg: #e9edff;
+  --muted: #8e9bc9;
+  --border: #1c2653;
+  --primary: #c85bf5;
+  --primary-fg: #14012a;
+  --income: #34d399;
+  --expense: #fb7185;
+  --warn: #fbbf24;
+  --ring: rgba(200, 91, 245, 0.45);
+  --c1: #c85bf5; --c2: #22c7f5; --c3: #fbbf24; --c4: #34d399; --c5: #f472b6; --c6: #6d8cff; --c7: #fb923c; --c8: #a3e635;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -54,6 +61,9 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-warn: var(--warn);
+  /* categorical chart palette: referenced here so the build keeps the --cN variables (charts read them inline) */
+  --color-chart-1: var(--c1); --color-chart-2: var(--c2); --color-chart-3: var(--c3); --color-chart-4: var(--c4);
+  --color-chart-5: var(--c5); --color-chart-6: var(--c6); --color-chart-7: var(--c7); --color-chart-8: var(--c8);
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
 }
 
@@ -63,4 +73,4 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+dialog::backdrop { background: rgba(4, 7, 24, 0.62); }

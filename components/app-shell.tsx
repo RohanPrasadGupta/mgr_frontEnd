@@ -1,34 +1,96 @@
 "use client";
+import AccountBalanceWalletOutlined from "@mui/icons-material/AccountBalanceWalletOutlined";
+import AddRounded from "@mui/icons-material/AddRounded";
+import AutorenewRounded from "@mui/icons-material/AutorenewRounded";
+import CategoryOutlined from "@mui/icons-material/CategoryOutlined";
+import DashboardOutlined from "@mui/icons-material/DashboardOutlined";
+import DonutSmallOutlined from "@mui/icons-material/DonutSmallOutlined";
+import LogoutRounded from "@mui/icons-material/LogoutRounded";
+import MenuOpenRounded from "@mui/icons-material/MenuOpenRounded";
+import MenuRounded from "@mui/icons-material/MenuRounded";
+import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
+import SwapHorizRounded from "@mui/icons-material/SwapHorizRounded";
+import SwapVertRounded from "@mui/icons-material/SwapVertRounded";
+import TrendingUpRounded from "@mui/icons-material/TrendingUpRounded";
+import UploadFileOutlined from "@mui/icons-material/UploadFileOutlined";
+import Drawer from "@mui/material/Drawer";
+import SpeedDial from "@mui/material/SpeedDial";
+import SpeedDialAction from "@mui/material/SpeedDialAction";
+import SpeedDialIcon from "@mui/material/SpeedDialIcon";
+import Tooltip from "@mui/material/Tooltip";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe } from "@/lib/api/hooks";
+import { useOnline } from "@/lib/use-online";
+import { TransactionForm } from "./transaction-form";
+import { TransferDialog } from "./transfer-dialog";
 import { cx } from "./ui";
 
 const NAV = [
-  { href: "/", label: "Dashboard", short: "Home", icon: "▦" },
-  { href: "/transactions", label: "Transactions", short: "Activity", icon: "⇅" },
-  { href: "/transfers", label: "Transfers", short: "Transfers", icon: "⇄" },
-  { href: "/budgets", label: "Budgets", short: "Budgets", icon: "◔" },
-  { href: "/investments", label: "Investments", short: "Invest", icon: "↗" },
-  { href: "/recurring", label: "Recurring", short: "Recurring", icon: "↻" },
-  { href: "/accounts", label: "Accounts", short: "Accounts", icon: "▤" },
-  { href: "/categories", label: "Categories", short: "Categories", icon: "◈" },
-  { href: "/import", label: "Import & export", short: "Import", icon: "⇪" },
-  { href: "/settings", label: "Settings", short: "Settings", icon: "⚙" },
-];
+  { href: "/", label: "Dashboard", icon: DashboardOutlined },
+  { href: "/transactions", label: "Transactions", icon: SwapVertRounded },
+  { href: "/transfers", label: "Transfers", icon: SwapHorizRounded },
+  { href: "/budgets", label: "Budgets", icon: DonutSmallOutlined },
+  { href: "/investments", label: "Investments", icon: TrendingUpRounded },
+  { href: "/recurring", label: "Recurring", icon: AutorenewRounded },
+  { href: "/accounts", label: "Accounts", icon: AccountBalanceWalletOutlined },
+  { href: "/categories", label: "Categories", icon: CategoryOutlined },
+  { href: "/import", label: "Import & export", icon: UploadFileOutlined },
+  { href: "/settings", label: "Settings", icon: SettingsOutlined },
+] as const;
 
-const PRIMARY = ["/", "/transactions", "/budgets", "/investments"];
-const MORE = NAV.filter((n) => !PRIMARY.includes(n.href));
+const QUICK = ["/", "/transactions", "/budgets", "/investments"];
+const STORE = "mm_nav";
+
+function NavLinks({ active, collapsed, onNavigate }: { active: (h: string) => boolean; collapsed?: boolean; onNavigate?: () => void }) {
+  return (
+    <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Main">
+      {NAV.map(({ href, label, icon: Icon }) => {
+        const on = active(href);
+        const link = (
+          <Link key={href} href={href} onClick={onNavigate} aria-current={on ? "page" : undefined} aria-label={collapsed ? label : undefined}
+            className={cx("relative flex items-center gap-3 rounded-xl py-2.5 text-sm font-medium transition-colors", collapsed ? "justify-center px-0" : "px-3",
+              on ? "bg-primary/12 text-primary before:absolute before:inset-y-1.5 before:left-0 before:w-1 before:rounded-full before:bg-primary" : "text-muted hover:bg-border/50 hover:text-fg")}>
+            <Icon fontSize="small" aria-hidden />{!collapsed && <span className="truncate">{label}</span>}
+          </Link>
+        );
+        return collapsed ? <Tooltip key={href} title={label} placement="right" arrow>{link}</Tooltip> : link;
+      })}
+    </nav>
+  );
+}
+
+function UserBar({ compact, name, email, onLogout }: { compact: boolean; name?: string; email?: string; onLogout: () => void }) {
+  const initials = (name ?? "").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "·";
+  return (
+    <div className={cx("border-t border-border p-3", compact ? "flex flex-col items-center gap-2" : "")}>
+      <div className={cx("flex items-center gap-3", compact && "flex-col gap-2")}>
+        <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">{initials}</span>
+        {!compact && <div className="min-w-0 flex-1 text-sm"><div className="truncate font-medium">{name ?? " "}</div><div className="truncate text-xs text-muted">{email}</div></div>}
+        <Tooltip title="Sign out" placement={compact ? "right" : "top"}>
+          <button type="button" onClick={onLogout} aria-label="Sign out" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-border/50 hover:text-expense"><LogoutRounded fontSize="small" /></button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { data: me } = useMe();
+  const online = useOnline();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
-  const [moreOpen, setMoreOpen] = useState(false);
-  useEffect(() => setMoreOpen(false), [path]);
-  const moreActive = MORE.some((n) => active(n.href));
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [drawer, setDrawer] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  // Restore the saved sidebar width after hydration (reading it during render would mismatch the server HTML).
+  useEffect(() => { try { setCollapsed(localStorage.getItem(STORE) === "1"); } catch { /* storage blocked */ } }, []);
+  useEffect(() => setDrawer(false), [path]);
+  const toggle = () => setCollapsed((c) => { try { localStorage.setItem(STORE, c ? "0" : "1"); } catch { /* ignore */ } return !c; });
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -36,53 +98,54 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
+  const initials = (me?.name ?? "").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "·";
+  const quick = [
+    { icon: <AddRounded />, name: "Add transaction", run: () => setAdding(true) },
+    { icon: <SwapHorizRounded />, name: "New transfer", run: () => setTransferring(true) },
+    ...NAV.filter((n) => QUICK.includes(n.href)).map((n) => ({ icon: <n.icon />, name: n.label, run: () => router.push(n.href) })).reverse(),
+    { icon: <MenuRounded />, name: "All pages", run: () => setDrawer(true) },
+  ];
+
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[14rem_1fr]">
-      <aside className="hidden border-r border-border bg-card p-4 md:flex md:flex-col">
-        <div className="mb-6 px-2 text-lg font-semibold">MoneyMgr</div>
-        <nav className="flex-1 space-y-1" aria-label="Main">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined}
-              className={cx("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium", active(n.href) ? "bg-primary/10 text-primary" : "text-muted hover:bg-border/50 hover:text-fg")}>
-              <span aria-hidden className="w-4 text-center">{n.icon}</span>{n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="border-t border-border pt-3 text-sm">
-          <div className="truncate font-medium">{me?.name ?? " "}</div>
-          <div className="truncate text-xs text-muted">{me?.email}</div>
-          <button onClick={logout} className="mt-2 text-xs text-muted underline hover:text-fg">Sign out</button>
+    <div className="flex min-h-screen">
+      {/* Desktop/tablet: sticky sidebar that stays put while the page scrolls; the burger toggles icons-only ↔ icons + labels. */}
+      <aside className={cx("sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 md:flex", collapsed ? "w-[4.5rem]" : "w-60")} data-collapsed={collapsed}>
+        <div className={cx("flex h-16 items-center gap-2 px-3", collapsed ? "justify-center" : "justify-between")}>
+          {!collapsed && <span className="truncate pl-2 text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>}
+          <button type="button" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}
+            className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-border/50 hover:text-fg">{collapsed ? <MenuRounded /> : <MenuOpenRounded />}</button>
         </div>
+        <NavLinks active={active} collapsed={collapsed} />
+        <UserBar compact={collapsed} name={me?.name} email={me?.email} onLogout={logout} />
       </aside>
-      <div className="min-w-0 pb-20 md:pb-0">
-        <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
-          <span className="font-semibold">MoneyMgr</span>
-          <button onClick={logout} className="text-xs text-muted underline">Sign out</button>
+
+      <div className="min-w-0 flex-1 pb-24 md:pb-0">
+        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur md:hidden">
+          <button type="button" onClick={() => setDrawer(true)} aria-label="Open menu" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-border/50"><MenuRounded /></button>
+          <span className="text-base font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>
         </header>
-        <main className="mx-auto w-full max-w-5xl p-4 md:p-8">{children}</main>
+        {!online && <div role="status" className="border-b border-warn/40 bg-warn/10 px-4 py-2 text-center text-sm text-warn">You’re offline — changes can’t be saved until your connection is back.</div>}
+        <main className="mx-auto w-full max-w-6xl p-4 md:p-8 2xl:max-w-[88rem]">{children}</main>
       </div>
-      {moreOpen && (
-        <div className="fixed inset-x-0 bottom-[3.75rem] z-10 border-t border-border bg-card p-2 shadow-lg md:hidden">
-          {MORE.map((n) => (
-            <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined}
-              className={cx("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium", active(n.href) ? "bg-primary/10 text-primary" : "text-fg")}>
-              <span aria-hidden className="w-4 text-center">{n.icon}</span>{n.label}
-            </Link>
-          ))}
+
+      <Drawer open={drawer} onClose={() => setDrawer(false)} sx={{ display: { md: "none" } }} slotProps={{ paper: { sx: { width: 280, maxWidth: "85vw" } } }}>
+        <div className="flex h-14 items-center justify-between px-4">
+          <span className="text-lg font-bold tracking-tight"><span className="text-primary">Money</span>Mgr</span>
+          <button type="button" onClick={() => setDrawer(false)} aria-label="Close menu" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-border/50"><MenuOpenRounded /></button>
         </div>
-      )}
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-card md:hidden">
-        {NAV.filter((n) => PRIMARY.includes(n.href)).map((n) => (
-          <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined}
-            className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium", active(n.href) ? "text-primary" : "text-muted")}>
-            <span aria-hidden className="text-base">{n.icon}</span>{n.short}
-          </Link>
-        ))}
-        <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}
-          className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium", moreActive || moreOpen ? "text-primary" : "text-muted")}>
-          <span aria-hidden className="text-base">⋯</span>More
-        </button>
-      </nav>
+        <NavLinks active={active} onNavigate={() => setDrawer(false)} />
+        <UserBar compact={false} name={me?.name} email={me?.email} onLogout={logout} />
+      </Drawer>
+
+      {/* Phones/small tablets: one thumb-reachable speed dial, bottom-left, replaces the old bottom tab bar. */}
+      <div className="md:hidden">
+        <SpeedDial ariaLabel="Quick actions" icon={<SpeedDialIcon />} direction="up" sx={{ position: "fixed", bottom: 16, left: 16 }}>
+          {quick.map((a) => <SpeedDialAction key={a.name} icon={a.icon} onClick={a.run} slotProps={{ tooltip: { title: a.name, open: true, placement: "right" } }} />)}
+        </SpeedDial>
+      </div>
+
+      <TransactionForm open={adding} onClose={() => setAdding(false)} />
+      <TransferDialog open={transferring} onClose={() => setTransferring(false)} />
     </div>
   );
 }

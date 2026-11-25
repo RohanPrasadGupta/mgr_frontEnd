@@ -5,10 +5,12 @@ import { invalidateLedger, useAccounts, useCategories, useMe, useMutate } from "
 import type { Body, Transaction } from "@/lib/api/types";
 import { minorUnit, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, ErrorNote, Field, Input, Modal, Segmented, Select } from "./ui";
+import { useConfirm } from "./feedback";
 
 const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose: () => void; tx?: Transaction | null }) {
+  const confirm = useConfirm();
   const accounts = useAccounts();
   const categories = useCategories();
   const { data: me } = useMe();
@@ -63,8 +65,8 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
     }
     if (!account) throw new Error("Choose an account");
     return call(client.POST("/transactions", { body: { accountId, kind, amountMinor: toMinor(major, account.currency), categoryId: categoryId || undefined, occurredAt, note: note || undefined, fxRate: fx ? Number(fx) : undefined, clientId: crypto.randomUUID() } }));
-  }, invalidateLedger);
-  const del = useMutate(() => call(client.DELETE("/transactions/{id}", { params: { path: { id: tx!.id } } })), invalidateLedger);
+  }, invalidateLedger, editing ? (transfer ? "Transfer updated" : "Transaction updated") : "Transaction added");
+  const del = useMutate(() => call(client.DELETE("/transactions/{id}", { params: { path: { id: tx!.id } } })), invalidateLedger, transfer ? "Transfer deleted" : "Transaction deleted");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,7 +74,7 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
     try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
   async function remove() {
-    if (!confirm(transfer ? "Delete this transfer (both sides)?" : "Delete this transaction?")) return;
+    if (!(await confirm({ message: transfer ? "Delete this transfer (both sides)?" : "Delete this transaction?", destructive: true }))) return;
     try { await del.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
 

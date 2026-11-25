@@ -6,6 +6,7 @@ import type { Body, BudgetPeriod, BudgetStatusItem } from "@/lib/api/types";
 import { budgetDate, formatMoney, pad, toMajor, toMinor } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Skeleton, cx } from "./ui";
+import { useConfirm } from "./feedback";
 
 const PERIOD: Record<BudgetPeriod, string> = { month: "Monthly", week: "Weekly", custom: "Custom range" };
 const stateStyle = { ok: "bg-income", warning: "bg-warn", over: "bg-expense" } as const;
@@ -13,18 +14,19 @@ const stateText = { ok: "On track", warning: "Close to limit", over: "Over budge
 const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export function BudgetsView() {
+  const confirm = useConfirm();
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const status = useBudgetStatus(budgetDate(ym.year, ym.month, now));
   const [dialog, setDialog] = useState<{ edit?: BudgetStatusItem } | null>(null);
   const base = status.data?.baseCurrency ?? "THB";
-  const remove = useMutate((id: string) => call(client.DELETE("/budgets/{id}", { params: { path: { id } } })), invalidateBudgets);
+  const remove = useMutate((id: string) => call(client.DELETE("/budgets/{id}", { params: { path: { id } } })), invalidateBudgets, "Budget deleted");
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Budgets</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => setYm({ year, month })} />
           <Button onClick={() => setDialog({})}>+ Add budget</Button>
         </div>
@@ -52,7 +54,7 @@ export function BudgetsView() {
               </div>
               <div className="mt-3 flex gap-3 text-xs text-muted">
                 <button className="underline" onClick={() => setDialog({ edit: b })}>Edit</button>
-                <button className="underline hover:text-expense" onClick={() => confirm(`Delete the ${b.categoryName ?? "overall"} budget?`) && remove.mutate(b.id)}>Delete</button>
+                <button className="underline hover:text-expense" onClick={async () => (await confirm({ message: `Delete the ${b.categoryName ?? "overall"} budget?`, destructive: true })) && remove.mutate(b.id)}>Delete</button>
               </div>
             </Card>
           ))}
@@ -69,7 +71,7 @@ function BudgetDialog({ state, base, onClose }: { state: { edit?: BudgetStatusIt
   const categories = useCategories();
   const [period, setPeriod] = useState<BudgetPeriod>("month");
   const [error, setError] = useState<string | null>(null);
-  const save = useMutate(({ id, body }: { id: string; body: Body<"/budgets/{id}", "patch"> } | { id?: undefined; body: Body<"/budgets", "post"> }) => (id ? call(client.PATCH("/budgets/{id}", { params: { path: { id } }, body: body as Body<"/budgets/{id}", "patch"> })) : call(client.POST("/budgets", { body: body as Body<"/budgets", "post"> }))), invalidateBudgets);
+  const save = useMutate(({ id, body }: { id: string; body: Body<"/budgets/{id}", "patch"> } | { id?: undefined; body: Body<"/budgets", "post"> }) => (id ? call(client.PATCH("/budgets/{id}", { params: { path: { id } }, body: body as Body<"/budgets/{id}", "patch"> })) : call(client.POST("/budgets", { body: body as Body<"/budgets", "post"> }))), invalidateBudgets, "Budget saved");
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

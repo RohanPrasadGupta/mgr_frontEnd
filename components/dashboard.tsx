@@ -1,139 +1,162 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
-import { useAccounts, useBudgetStatus, useByCategory, useMe, useSummary, useTransactions, useTrend, useCategories } from "@/lib/api/hooks";
-import { budgetDate, formatMoney, monthRange } from "@/lib/money";
-import { Card, Empty, ErrorNote, Skeleton, cx } from "./ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccounts, useBudgetStatus, useByCategory, useCategories, useDaily, useLatestTransaction, useMe, useSummary, useTransactions, useTrend } from "@/lib/api/hooks";
+import { compact, toSlices } from "@/lib/chart-utils";
+import { budgetDate, formatMoney, monthLabel, monthRange, pad, shiftMonth, toMajor } from "@/lib/money";
+import { DailyBars, DonutChart, Gauge, GroupedBarChart, LineChart } from "./charts";
 import { MonthPicker } from "./month-picker";
 import { TransactionRow } from "./transaction-row";
+import { Button, Card, Empty, Skeleton, cx } from "./ui";
+import { Widget } from "./widget";
 
-const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const bandStyle = { healthy: "bg-income/15 text-income", low: "bg-warn/15 text-warn", overspending: "bg-expense/15 text-expense", none: "bg-border text-muted" } as const;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const PALETTE = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
 const bandText = { healthy: "Healthy savings", low: "Low buffer", overspending: "Spending more than earned", none: "No income" } as const;
 
 export function Dashboard() {
   const now = new Date();
   const [ym, setYm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const touched = useRef(false); // once the user picks a month themselves we stop auto-selecting
   const { from, to } = monthRange(ym.year, ym.month);
-  const { data: me } = useMe();
-  const cur = me?.baseCurrency ?? "THB";
+  const prev = shiftMonth(ym.year, ym.month, -1);
+  const prevRange = monthRange(prev.year, prev.month);
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  const qc = useQueryClient();
+  const me = useMe();
+  const cur = me.data?.baseCurrency ?? "THB";
   const summary = useSummary(from, to);
-  const byCat = useByCategory(from, to, "expense");
+  const prevSummary = useSummary(prevRange.from, prevRange.to);
+  const expenseCats = useByCategory(from, to, "expense");
+  const incomeCats = useByCategory(from, to, "income");
+  const daily = useDaily(from, to);
   const trend = useTrend(ym.year);
   const accounts = useAccounts();
   const cats = useCategories();
-  const recent = useTransactions({ from, to });
   const budgets = useBudgetStatus(budgetDate(ym.year, ym.month, now));
+  const recent = useTransactions({ from, to });
+  const latest = useLatestTransaction();
   const s = summary.data;
+  // A returning user whose current month is still empty lands on their most recent month with data instead of a blank page.
+  useEffect(() => {
+    if (touched.current || !latest.data || summary.data?.transactionCount !== 0) return;
+    const [y, m] = latest.data.occurredOn.split("-").map(Number) as [number, number];
+    if (y !== ym.year || m !== ym.month) setYm({ year: y, month: m });
+  }, [latest.data, summary.data?.transactionCount, ym.year, ym.month]);
+  const fmt = (v: number) => formatMoney(v, cur);
+  const axis = (v: number) => compact(toMajor(v, cur));
+
+  const expenseSlices = useMemo(() => toSlices((expenseCats.data?.items ?? []).map((i) => ({ label: i.name, value: i.totalMinor })), PALETTE), [expenseCats.data]);
+  const incomeSlices = useMemo(() => toSlices((incomeCats.data?.items ?? []).map((i) => ({ label: i.name, value: i.totalMinor })), PALETTE), [incomeCats.data]);
+  const activeAccounts = (accounts.data ?? []).filter((a) => !a.archived);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => setYm({ year, month })} />
+        <MonthPicker year={ym.year} month={ym.month} onChange={(year, month) => { touched.current = true; setYm({ year, month }); }} />
       </div>
 
-      {summary.error ? <ErrorNote error={summary.error} retry={() => summary.refetch()} /> : (
-        <section aria-label="Summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Income" value={s && formatMoney(s.incomeMinor, cur)} tone="income" />
-          <Stat label="Expense" value={s && formatMoney(s.expenseMinor, cur)} tone="expense" />
-          <Stat label="Net" value={s && formatMoney(s.netMinor, cur, { sign: true })} tone={s && s.netMinor < 0 ? "expense" : "income"} />
-          <Card>
-            <div className="text-xs text-muted">Savings rate</div>
-            {s ? (<>
-              <div className="mt-1 text-2xl font-semibold tabular-nums">{s.savingsRatePct === null ? "—" : `${s.savingsRatePct.toFixed(1)}%`}</div>
-              <span className={cx("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium", bandStyle[s.savingsBand])}>{bandText[s.savingsBand]}</span>
-            </>) : <Skeleton className="mt-2 h-8 w-24" />}
-          </Card>
-        </section>
+      {summary.error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-expense/40 bg-expense/10 p-3 text-sm text-expense">
+          <span>{summary.error instanceof Error ? summary.error.message : "Couldn’t load your dashboard."}</span>
+          <Button variant="ghost" onClick={() => void qc.invalidateQueries()}>Retry everything</Button>
+        </div>
       )}
+      <section aria-label="Summary" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Kpi label="Income" failed={!!summary.error} value={s && fmt(s.incomeMinor)} tone="income" now={s?.incomeMinor} before={prevSummary.data?.incomeMinor} goodWhenUp />
+        <Kpi label="Expense" failed={!!summary.error} value={s && fmt(s.expenseMinor)} tone="expense" now={s?.expenseMinor} before={prevSummary.data?.expenseMinor} goodWhenUp={false} />
+        <Kpi label="Net" failed={!!summary.error} value={s && formatMoney(s.netMinor, cur, { sign: true })} tone={s && s.netMinor < 0 ? "expense" : "income"} now={s?.netMinor} before={prevSummary.data?.netMinor} goodWhenUp />
+        <Card className="col-span-2 p-3 xl:col-span-1">
+          <div className="text-xs text-muted">Savings rate</div>
+          {s ? <Gauge pct={s.savingsRatePct} band={s.savingsBand} label={bandText[s.savingsBand]} /> : summary.error ? <p className="mt-2 text-sm text-muted">—</p> : <Skeleton className="mt-2 h-24" />}
+        </Card>
+      </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 text-sm font-semibold">Top expenses</h2>
-          {byCat.isPending ? <Skeleton className="h-40" /> : byCat.error ? <ErrorNote error={byCat.error} /> : byCat.data.items.length === 0 ? <Empty>No expenses this month.</Empty> : (
-            <ul className="space-y-2.5">
-              {byCat.data.items.slice(0, 8).map((i) => (
-                <li key={i.categoryId ?? "none"}>
-                  <div className="flex justify-between text-sm"><span className="truncate">{i.name}</span><span className="tabular-nums text-muted">{formatMoney(i.totalMinor, cur)} · {i.pct.toFixed(0)}%</span></div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-expense" style={{ width: `${Math.max(2, i.pct)}%` }} /></div>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <Widget title={`Income vs expense · ${ym.year}`} className="lg:col-span-2" state={trend}>
+          {trend.data && <GroupedBarChart labels={MONTHS} ariaLabel={`Monthly income and expense for ${ym.year}`} format={fmt} axis={axis}
+            series={[{ name: "Income", values: trend.data.incomeMinor, className: "fill-income" }, { name: "Expense", values: trend.data.expenseMinor, className: "fill-expense" }]} />}
+        </Widget>
+
+        <Widget title="Where the money went" state={expenseCats}>
+          <DonutChart slices={expenseSlices} centerLabel="Expenses" centerValue={fmt(expenseCats.data?.totalMinor ?? 0)} format={fmt} ariaLabel={`Expenses by category for ${monthLabel(ym.year, ym.month)}`} />
+        </Widget>
+
+        <Widget title={`Spending per day · ${monthLabel(ym.year, ym.month)}`} className="lg:col-span-2" state={daily}>
+          {daily.data && <DailyBars days={daily.data.days.map((d) => ({ date: d.date, value: d.expenseMinor }))} today={todayStr} format={fmt} axis={axis} ariaLabel={`Daily spending for ${monthLabel(ym.year, ym.month)}`} />}
+        </Widget>
+
+        <Widget title="Income sources" state={incomeCats}>
+          <DonutChart slices={incomeSlices} centerLabel="Income" centerValue={fmt(incomeCats.data?.totalMinor ?? 0)} format={fmt} ariaLabel={`Income by category for ${monthLabel(ym.year, ym.month)}`} />
+        </Widget>
+
+        <Widget title={`Net & running total · ${ym.year}`} className="lg:col-span-2" state={trend}>
+          {trend.data && <LineChart labels={MONTHS} ariaLabel={`Monthly net and cumulative net for ${ym.year}`} format={(v) => formatMoney(v, cur, { sign: true })} axis={axis}
+            series={[{ name: "Net", values: trend.data.netMinor, className: "stroke-primary", stroke: "area" }, { name: "Running total", values: trend.data.cumulativeNetMinor, className: "stroke-warn" }]} />}
+        </Widget>
+
+        <Widget title="Budgets" state={budgets} action={<Link href="/budgets" className="text-xs text-primary underline">Manage</Link>}>
+          {budgets.data && (budgets.data.items.length === 0 ? <Empty>No budgets this month. <Link href="/budgets" className="text-primary underline">Add one</Link></Empty> : (
+            <ul className="space-y-3">
+              {[...budgets.data.items].sort((a, b) => b.pct - a.pct).slice(0, 5).map((b) => (
+                <li key={b.id}>
+                  <div className="flex justify-between gap-2 text-sm"><span className="truncate">{b.categoryName ?? "All expenses"}</span><span className={cx("shrink-0 tabular-nums", b.state === "over" ? "text-expense" : b.state === "warning" ? "text-warn" : "text-muted")}>{b.pct.toFixed(0)}%</span></div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", b.state === "over" ? "bg-expense" : b.state === "warning" ? "bg-warn" : "bg-income")} style={{ width: `${Math.min(100, b.pct)}%` }} /></div>
+                  <div className="mt-0.5 text-xs text-muted tabular-nums">{fmt(b.spentMinor)} / {fmt(b.amountMinor)}</div>
                 </li>
               ))}
             </ul>
-          )}
-        </Card>
+          ))}
+        </Widget>
 
-        <Card>
-          <h2 className="mb-3 text-sm font-semibold">{ym.year}: income vs expense</h2>
-          {trend.isPending ? <Skeleton className="h-40" /> : trend.error ? <ErrorNote error={trend.error} /> : <TrendChart income={trend.data.incomeMinor} expense={trend.data.expenseMinor} currency={cur} />}
-        </Card>
-      </div>
-
-      {budgets.data && budgets.data.items.length > 0 && (
-        <Card>
-          <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Budgets</h2><Link href="/budgets" className="text-xs text-primary underline">Manage</Link></div>
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[...budgets.data.items].sort((a, b) => b.pct - a.pct).slice(0, 3).map((b) => (
-              <li key={b.id}>
-                <div className="flex justify-between text-sm"><span className="truncate">{b.categoryName ?? "All expenses"}</span><span className={cx("tabular-nums", b.state === "over" ? "text-expense" : b.state === "warning" ? "text-warn" : "text-muted")}>{b.pct.toFixed(0)}%</span></div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", b.state === "over" ? "bg-expense" : b.state === "warning" ? "bg-warn" : "bg-income")} style={{ width: `${Math.min(100, b.pct)}%` }} /></div>
-                <div className="mt-1 text-xs text-muted tabular-nums">{formatMoney(b.spentMinor, cur)} / {formatMoney(b.amountMinor, cur)}</div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <Card>
-          <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">Recent transactions</h2><Link href="/transactions" className="text-xs text-primary underline">View all</Link></div>
-          {recent.isPending ? <Skeleton className="h-40" /> : recent.error ? <ErrorNote error={recent.error} /> : (recent.data.pages[0]?.data.length ?? 0) === 0 ? <Empty>Nothing recorded this month.</Empty> : (
+        <Widget title="Recent transactions" className="lg:col-span-2" state={recent} action={<Link href="/transactions" className="text-xs text-primary underline">View all</Link>}>
+          {(recent.data?.pages[0]?.data.length ?? 0) === 0 ? <Empty>Nothing recorded this month.</Empty> : (
             <ul className="divide-y divide-border">
-              {recent.data.pages[0]!.data.slice(0, 6).map((t) => <TransactionRow key={t.id} tx={t} categories={cats.data} accounts={accounts.data} baseCurrency={cur} />)}
+              {recent.data!.pages[0]!.data.slice(0, 6).map((t) => <TransactionRow key={t.id} tx={t} categories={cats.data} accounts={accounts.data} baseCurrency={cur} />)}
             </ul>
           )}
-        </Card>
-        <Card>
-          <h2 className="mb-2 text-sm font-semibold">Accounts</h2>
-          {accounts.isPending ? <Skeleton className="h-24" /> : accounts.error ? <ErrorNote error={accounts.error} /> : (
-            <ul className="space-y-2">
-              {accounts.data.filter((a) => !a.archived).map((a) => (
-                <li key={a.id} className="flex justify-between text-sm"><span className="truncate">{a.name}</span><span className={cx("tabular-nums", a.balanceMinor < 0 && "text-expense")}>{formatMoney(a.balanceMinor, a.currency)}</span></li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        </Widget>
+
+        <Widget title="Accounts" state={accounts} action={<Link href="/accounts" className="text-xs text-primary underline">Manage</Link>}>
+          {activeAccounts.length === 0 ? <Empty>No accounts yet.</Empty> : <BalanceBars accounts={activeAccounts} />}
+        </Widget>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value?: string; tone: "income" | "expense" }) {
+function Kpi({ label, value, tone, now, before, goodWhenUp, failed }: { label: string; value?: string; failed?: boolean; tone: "income" | "expense"; now?: number; before?: number; goodWhenUp: boolean }) {
+  const delta = now !== undefined && before !== undefined && before !== 0 ? ((now - before) / Math.abs(before)) * 100 : null;
+  const good = delta === null ? null : goodWhenUp ? delta >= 0 : delta <= 0;
   return (
-    <Card>
+    <Card className="p-3 sm:p-4">
       <div className="text-xs text-muted">{label}</div>
-      {value === undefined ? <Skeleton className="mt-2 h-8 w-28" /> : <div className={cx("mt-1 text-2xl font-semibold tabular-nums", tone === "income" ? "text-income" : "text-expense")}>{value}</div>}
+      {value === undefined ? (failed ? <div className="mt-1 text-lg text-muted sm:text-2xl">—</div> : <Skeleton className="mt-2 h-7 w-24" />) : <div className={cx("mt-1 truncate text-lg font-semibold tabular-nums sm:text-2xl", tone === "income" ? "text-income" : "text-expense")} title={value}>{value}</div>}
+      {delta !== null && Math.abs(delta) >= 0.5 && (
+        <div className={cx("mt-1 text-xs tabular-nums", good ? "text-income" : "text-expense")} aria-label={`${delta > 0 ? "Up" : "Down"} ${Math.abs(delta).toFixed(0)} percent versus last month`}>{delta > 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}% <span className="text-muted">vs last month</span></div>
+      )}
     </Card>
   );
 }
 
-function TrendChart({ income, expense, currency }: { income: number[]; expense: number[]; currency: string }) {
-  const max = Math.max(1, ...income, ...expense);
-  const W = 600, H = 170, base = 150, bw = 14, gap = W / 12;
+/** Balances side by side as bars (positive right of the axis in green, overdrawn in red), grouped by currency so units are never mixed. */
+function BalanceBars({ accounts }: { accounts: { id: string; name: string; currency: string; balanceMinor: number }[] }) {
+  const maxByCur = new Map<string, number>();
+  for (const a of accounts) maxByCur.set(a.currency, Math.max(maxByCur.get(a.currency) ?? 0, Math.abs(a.balanceMinor)));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Monthly income and expense" className="w-full">
-      {income.map((v, i) => {
-        const x = i * gap + gap / 2;
-        const hi = (v / max) * (base - 10), he = (expense[i]! / max) * (base - 10);
+    <ul className="space-y-3">
+      {accounts.map((a) => {
+        const pct = (Math.abs(a.balanceMinor) / (maxByCur.get(a.currency) || 1)) * 100;
         return (
-          <g key={i}>
-            <title>{`${MONTHS[i]}: income ${formatMoney(v, currency)}, expense ${formatMoney(expense[i]!, currency)}`}</title>
-            <rect x={x - bw - 1} y={base - hi} width={bw} height={hi} rx={2} className="fill-income" />
-            <rect x={x + 1} y={base - he} width={bw} height={he} rx={2} className="fill-expense" />
-            <text x={x} y={H - 6} textAnchor="middle" className="fill-muted text-[11px]">{MONTHS[i]}</text>
-          </g>
+          <li key={a.id}>
+            <div className="flex justify-between gap-2 text-sm"><span className="truncate">{a.name}</span><span className={cx("shrink-0 tabular-nums", a.balanceMinor < 0 && "text-expense")}>{formatMoney(a.balanceMinor, a.currency)}</span></div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border"><div className={cx("h-full rounded-full", a.balanceMinor < 0 ? "bg-expense" : "bg-primary")} style={{ width: `${Math.max(2, pct)}%` }} /></div>
+          </li>
         );
       })}
-    </svg>
+    </ul>
   );
 }

@@ -74,4 +74,36 @@ describe("TransactionsView", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
+
+  it("shows edit and delete buttons on every row (no hunting for a clickable record)", async () => {
+    mockFetch({ ...baseRoutes, "GET /transactions": page([t({ id: "1", note: "lunch" }), t({ id: "2", kind: "income", categoryId: "c-salary" })]) });
+    renderWithClient(<TransactionsView />);
+    await screen.findByText(/Fri, Nov 20/);
+    expect(screen.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Delete / })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Edit Food" })).toBeInTheDocument();
+  });
+
+  it("Edit opens the edit form for that row", async () => {
+    mockFetch({ ...baseRoutes, "GET /transactions": page([t({ id: "1", note: "lunch" })]) });
+    renderWithClient(<TransactionsView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Food" }));
+    expect(await screen.findByRole("heading", { name: "Edit transaction" })).toBeInTheDocument();
+  });
+
+  it("Delete asks in a dialog first; Cancel sends nothing, confirming deletes and shows a success toast", async () => {
+    const m = mockFetch({ ...baseRoutes, "GET /transactions": page([t({ id: "1", note: "lunch" })]), "DELETE /transactions/1": null });
+    renderWithClient(<TransactionsView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete Food" }));
+    let dlg = await screen.findByRole("dialog", { name: "Delete transaction?" });
+    await userEvent.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(m.last("DELETE", "/transactions/1")).toBeUndefined();
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete Food" }));
+    dlg = await screen.findByRole("dialog", { name: "Delete transaction?" });
+    await userEvent.click(within(dlg).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(m.last("DELETE", "/transactions/1")).toBeDefined());
+    expect(await screen.findByText("Transaction deleted")).toBeInTheDocument();
+  });
 });
