@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
@@ -92,6 +93,7 @@ export function SettingsView() {
 
       <ChangePasswordCard />
 
+      <p className="text-sm text-muted"><Link href="/privacy" className="text-primary underline">Privacy policy</Link></p>
       <DeleteAccountCard />
     </div>
   );

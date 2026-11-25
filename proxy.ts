@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Optimistic gate only (cookie presence). Real authorization happens in the API on every call.
 const SIGNED_OUT_ONLY = ["/login", "/register", "/forgot-password"];
 /** Reachable either way: they arrive from an email link and work on a token, not a session. */
-const OPEN = ["/reset-password", "/verify-email"];
+const OPEN = ["/reset-password", "/verify-email", "/privacy", "/delete-account"]; // the last two are the public legal pages the app stores link to
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

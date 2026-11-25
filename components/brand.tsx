@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { cx } from "./ui";
+// Own class joiner: ./ui is a client module, and the wordmark also renders in server components (the legal pages).
+const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
 // Brand assets live in public/brand (generated from the source logos in public/ with transparent backgrounds).
 // Both wordmark colourways are rendered; CSS shows the one that matches the active theme (no JS, no flash).

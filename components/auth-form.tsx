@@ -49,6 +49,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           {register ? "Have an account? " : "New here? "}
           <Link href={register ? "/login" : "/register"} className="text-primary underline">{register ? "Sign in" : "Create an account"}</Link>
         </p>
+        {register && <p className="text-center text-xs text-muted">By creating an account you agree to how we handle your data in the <Link href="/privacy" className="text-primary underline">privacy policy</Link>.</p>}
       </Card>
     </main>
   );
