@@ -3434,6 +3434,30 @@
                       "value"
                     ]
                   },
+                  "convertCurrency": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "convertRate": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "currency": {
                     "type": "string",
                     "minLength": 3,
@@ -5594,14 +5618,15 @@
               "type": "string",
               "enum": [
                 "month",
-                "year"
+                "year",
+                "all"
               ]
             }
           },
           {
             "name": "year",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1970,
@@ -8153,6 +8178,18 @@
               "manual"
             ]
           },
+          "convertCurrency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "convertRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "archived": {
             "type": "boolean"
           },
@@ -8181,6 +8218,8 @@
           "currency",
           "tracking",
           "costMethod",
+          "convertCurrency",
+          "convertRate",
           "archived",
           "createdAt",
           "deletedAt"
@@ -10016,7 +10055,8 @@
             "type": "string",
             "enum": [
               "month",
-              "year"
+              "year",
+              "all"
             ]
           },
           "label": {

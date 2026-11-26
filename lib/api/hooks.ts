@@ -107,8 +107,8 @@ export const useDebts = (status: "open" | "settled" | "all") => useQuery({ query
 export const useDebtSummary = () => useQuery({ queryKey: [...qk.debts, "summary"] as const, queryFn: async () => (await call(client.GET("/debts/summary"))).data, staleTime: 30_000 });
 export const useDebt = (id?: string | null) => useQuery({ queryKey: [...qk.debts, "detail", id] as const, enabled: !!id, queryFn: async () => (await call(client.GET("/debts/{id}", { params: { path: { id: id! } } }))).data });
 export const useNotes = (q: string) => useQuery({ queryKey: [...qk.notes, { q }] as const, queryFn: async () => (await call(client.GET("/notes", { params: { query: q ? { q } : {} } }))).data, ...keep, staleTime: 30_000 });
-export const useReport = (period: "month" | "year", year: number, month?: number) =>
-  useQuery({ queryKey: [...qk.reports, { period, year, month }] as const, queryFn: async () => (await call(client.GET("/reports", { params: { query: { period, year, ...(period === "month" ? { month } : {}) } } }))).data, ...keep, staleTime: 30_000 });
+export const useReport = (period: "month" | "year" | "all", year: number, month?: number) =>
+  useQuery({ queryKey: [...qk.reports, period === "all" ? { period } : { period, year, month }] as const, queryFn: async () => (await call(client.GET("/reports", { params: { query: { period, ...(period === "all" ? {} : { year }), ...(period === "month" ? { month } : {}) } } }))).data, ...keep, staleTime: 30_000 });
 
 export const invalidateTags = (qc: QueryClient) => Promise.all([qc.invalidateQueries({ queryKey: qk.tags }), qc.invalidateQueries({ queryKey: ["transactions"] })]);
 export const invalidateGoals = (qc: QueryClient) => qc.invalidateQueries({ queryKey: qk.goals });

@@ -96,4 +96,13 @@ describe("investments list", () => {
     await u.click(within(dialog).getByRole("button", { name: "Add" }));
     await waitFor(() => expect(m.last("POST", "/investments/assets")!.body).toMatchObject({ class: "crypto", tracking: "value", symbol: "btc" }));
   });
+
+  it("shows only the portfolio value, one total per currency (no mixed-currency P/L cards)", async () => {
+    mockFetch({ ...baseRoutes, "GET /investments/portfolio": { data: portfolio }, "GET /investments/portfolio/history": { data: { baseCurrency: "THB", points: [] } }, "GET /investments/trades": { data: [] } });
+    renderWithClient(<InvestmentsView />);
+    const sec = await screen.findByRole("region", { name: "Portfolio value" });
+    expect(sec).toHaveTextContent(/Portfolio value\s*NPR\s?4,630.00/); // both holdings are NPR → one total
+    expect(screen.queryByText("Unrealised P/L")).toBeNull();
+    expect(screen.queryByText("Invested (cost)")).toBeNull();
+  });
 });

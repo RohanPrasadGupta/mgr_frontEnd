@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Holding, Trade } from "./api/types";
-import { assetIndex, capitalChange, classesOf, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital } from "./invest-board";
+import { assetIndex, capitalChange, classesOf, portfolioValue, shownIn, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital } from "./invest-board";
 
 const asset = (id: string, cls: string, currency: string, tracking = "units") => ({ id, userId: "u", symbol: id.toUpperCase(), name: id, class: cls, currency, tracking, costMethod: "wavg", archived: false, createdAt: "2025-01-01T00:00:00.000Z", deletedAt: null });
 const h = (a: ReturnType<typeof asset>, o: Partial<Holding> = {}) => ({
@@ -43,5 +43,24 @@ describe("investments board", () => {
   });
   it("lastMonths crosses year boundaries", () => {
     expect(lastMonths("2026-02-10", 4)).toEqual(["2025-11", "2025-12", "2026-01", "2026-02"]);
+  });
+
+  it("counts a converted asset in its chosen currency at the user's rate", () => {
+    expect(shownIn({ currency: "THB", convertCurrency: "NPR", convertRate: 4.2 })).toEqual({ cur: "NPR", k: 4.2 });
+    expect(shownIn({ currency: "THB", convertCurrency: "JPY", convertRate: 4 }).k).toBeCloseTo(0.04); // 2 → 0 decimals
+    expect(shownIn({ currency: "THB" })).toEqual({ cur: "THB", k: 1 });
+    const coin = h({ ...asset("btc", "crypto", "THB", "value"), convertCurrency: "NPR", convertRate: 4 } as never, { remainingCostMinor: 100_000, contributedMinor: 100_000, tradeCount: 1 });
+    const [crypto] = totalsByClass([coin]);
+    expect(crypto!.capital).toEqual({ NPR: 400_000 });
+    const idx = assetIndex([coin]);
+    expect(monthlyCapital([t("btc", "contribution", "2026-11-02", 100_000)], idx, "NPR", ["2026-11"])).toEqual({ crypto: [400_000] });
+    expect(currenciesOf([t("btc", "contribution", "2026-11-02", 1)], idx)).toEqual(["NPR"]);
+  });
+
+  it("portfolio value: one total per currency, converted assets counted in their chosen currency", () => {
+    expect(portfolioValue(holdings)).toEqual({ NPR: 1900, THB: 500 }); // nothing priced → at cost
+    const priced = h(asset("p", "stock", "NPR"), { remainingCostMinor: 100, marketValueMinor: 250 });
+    const converted = h({ ...asset("c", "crypto", "THB", "value"), convertCurrency: "NPR", convertRate: 4 } as never, { remainingCostMinor: 1000 });
+    expect(portfolioValue([priced, converted])).toEqual({ NPR: 4250 }); // a single currency → a single total
   });
 });

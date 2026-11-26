@@ -63,7 +63,7 @@ describe("AppShell", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open menu" }));
     const drawer = await screen.findByRole("presentation");
     const links = within(drawer).getAllByRole("link").map((l) => l.textContent);
-    expect(links).toEqual(["Dashboard", "Transactions", "Transfers", "Budgets", "Investments", "Goals", "Debts", "Reports", "Recurring", "Accounts", "Categories & tags", "Notes", "Import & export", "Settings"]);
+    expect(links).toEqual(["Dashboard", "Transactions", "Reports", "Investments", "Categories & tags", "Notes", "Transfers", "Budgets", "Goals", "Debts", "Recurring", "Accounts", "Import & export", "Settings"]);
     await userEvent.click(within(drawer).getByRole("button", { name: "Close menu" }));
 
     await vi.waitFor(() => expect(document.querySelector(".MuiDrawer-root")).toBeNull()); // modal un-hides the page when it has left

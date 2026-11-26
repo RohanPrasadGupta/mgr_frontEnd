@@ -24,14 +24,14 @@ export function reportCsv(r: Report): string {
     ["", "This period", "Previous period"], ["Income", m(r.incomeMinor), m(r.previous.incomeMinor)], ["Expense", m(r.expenseMinor), m(r.previous.expenseMinor)], ["Net", m(r.netMinor), m(r.previous.netMinor)], [],
     ["Expense category", "Amount", "Share %", "Previous", "Change %"], ...r.expenseByCategory.map((c) => [c.name, m(c.totalMinor), c.pct.toFixed(1), m(c.previousMinor), c.changePct === null ? "" : c.changePct.toFixed(1)]), [],
     ["Income category", "Amount", "Share %", "Previous", "Change %"], ...r.incomeByCategory.map((c) => [c.name, m(c.totalMinor), c.pct.toFixed(1), m(c.previousMinor), c.changePct === null ? "" : c.changePct.toFixed(1)]), [],
-    [r.period === "year" ? "Month" : "Day", "Income", "Expense"], ...r.series.map((s) => [s.from, m(s.incomeMinor), m(s.expenseMinor)]),
+    [r.period === "month" ? "Day" : r.period === "year" ? "Month" : "Period start", "Income", "Expense"], ...r.series.map((s) => [s.from, m(s.incomeMinor), m(s.expenseMinor)]),
   ];
   return rows.map((row) => row.map(cell).join(",")).join("\r\n");
 }
 
 export function ReportsView() {
   const now = new Date();
-  const [period, setPeriod] = useState<"month" | "year">("month");
+  const [period, setPeriod] = useState<"month" | "year" | "all">("month");
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const report = useReport(period, year, month);
@@ -40,7 +40,7 @@ export function ReportsView() {
   function download() {
     if (!r) return;
     const url = URL.createObjectURL(new Blob(["﻿", reportCsv(r)], { type: "text/csv;charset=utf-8" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: `moneymgr-report-${r.from.slice(0, period === "year" ? 4 : 7)}.csv` });
+    const a = Object.assign(document.createElement("a"), { href: url, download: `moneymgr-report-${period === "all" ? "all-time" : r.from.slice(0, period === "year" ? 4 : 7)}.csv` });
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -50,8 +50,8 @@ export function ReportsView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Reports</h1>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          <Segmented value={period} onChange={setPeriod} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }]} />
-          {period === "month" ? <MonthPicker year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} /> : (
+          <Segmented value={period} onChange={setPeriod} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }, { value: "all", label: "All time" }]} />
+          {period === "all" ? null : period === "month" ? <MonthPicker year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} /> : (
             <div className="inline-flex items-center gap-1">
               <Button variant="ghost" onClick={() => setYear((y) => y - 1)} aria-label="Previous year">‹</Button>
               <span className="min-w-16 text-center text-sm font-semibold tabular-nums">{year}</span>
@@ -67,8 +67,10 @@ export function ReportsView() {
   );
 }
 
-function Delta({ now, before, goodWhenUp }: { now: number; before: number; goodWhenUp: boolean }) {
+function Delta({ now, before, goodWhenUp, off }: { now: number; before: number; goodWhenUp: boolean; off?: boolean }) {
+  if (off) return null; // all-time: nothing to compare with
   const d = change(now, before);
+  if (before === 0 && now !== 0) return null; // nothing to compare with (e.g. an all-time report)
   if (d === null || Math.abs(d) < 0.5) return <span className="text-xs text-muted">no change</span>;
   const good = goodWhenUp ? d > 0 : d < 0;
   return <span className={cx("text-xs tabular-nums", good ? "text-income" : "text-expense")}>{d > 0 ? "▲" : "▼"} {Math.abs(d).toFixed(0)}% vs previous</span>;
@@ -81,16 +83,16 @@ function ReportBody({ r }: { r: Report }) {
   if (r.transactionCount === 0 && r.previous.incomeMinor === 0 && r.previous.expenseMinor === 0) return <Empty>No income or expenses in {r.label}.</Empty>;
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">{r.label} · {formatDate(r.from)} – {formatDate(r.to)} · {r.transactionCount} transactions · compared with {formatDate(r.previousFrom)} – {formatDate(r.previousTo)}</p>
+      <p className="text-sm text-muted">{r.label} · {formatDate(r.from)} – {formatDate(r.to)} · {r.transactionCount} transactions{r.period === "all" ? " · everything recorded up to today" : ` · compared with ${formatDate(r.previousFrom)} – ${formatDate(r.previousTo)}`}</p>
       <section aria-label="Totals" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Card className="p-3"><div className="text-xs text-muted">Income</div><div className="truncate text-xl font-semibold tabular-nums text-income">{fmt(r.incomeMinor)}</div><Delta now={r.incomeMinor} before={r.previous.incomeMinor} goodWhenUp /></Card>
-        <Card className="p-3"><div className="text-xs text-muted">Expense</div><div className="truncate text-xl font-semibold tabular-nums text-expense">{fmt(r.expenseMinor)}</div><Delta now={r.expenseMinor} before={r.previous.expenseMinor} goodWhenUp={false} /></Card>
-        <Card className="p-3"><div className="text-xs text-muted">Net</div><div className={cx("truncate text-xl font-semibold tabular-nums", r.netMinor < 0 ? "text-expense" : "text-income")}>{formatMoney(r.netMinor, r.baseCurrency, { sign: true })}</div><Delta now={r.netMinor} before={r.previous.netMinor} goodWhenUp /></Card>
+        <Card className="p-3"><div className="text-xs text-muted">Income</div><div className="truncate text-xl font-semibold tabular-nums text-income">{fmt(r.incomeMinor)}</div><Delta off={r.period === "all"} now={r.incomeMinor} before={r.previous.incomeMinor} goodWhenUp /></Card>
+        <Card className="p-3"><div className="text-xs text-muted">Expense</div><div className="truncate text-xl font-semibold tabular-nums text-expense">{fmt(r.expenseMinor)}</div><Delta off={r.period === "all"} now={r.expenseMinor} before={r.previous.expenseMinor} goodWhenUp={false} /></Card>
+        <Card className="p-3"><div className="text-xs text-muted">Net</div><div className={cx("truncate text-xl font-semibold tabular-nums", r.netMinor < 0 ? "text-expense" : "text-income")}>{formatMoney(r.netMinor, r.baseCurrency, { sign: true })}</div><Delta off={r.period === "all"} now={r.netMinor} before={r.previous.netMinor} goodWhenUp /></Card>
         <Card className="p-3"><div className="text-xs text-muted">Savings rate · avg spend/day</div><div className="text-xl font-semibold tabular-nums">{r.savingsRatePct === null ? "—" : `${r.savingsRatePct.toFixed(0)}%`}</div><div className="text-xs text-muted tabular-nums">{fmt(r.avgDailyExpenseMinor)} per day</div></Card>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card className="min-w-0"><h2 className="mb-2 text-sm font-semibold">{r.period === "year" ? "Month by month" : "Day by day"}</h2>
+        <Card className="min-w-0"><h2 className="mb-2 text-sm font-semibold">{r.period === "all" ? (r.series[0]?.label.length === 4 ? "Year by year" : "Month by month") : r.period === "year" ? "Month by month" : "Day by day"}</h2>
           <GroupedBarChart labels={r.series.map((s) => s.label)} ariaLabel={`Income and expense for ${r.label}`} format={fmt} axis={axis}
             series={[{ name: "Income", values: r.series.map((s) => s.incomeMinor), className: "fill-income" }, { name: "Expense", values: r.series.map((s) => s.expenseMinor), className: "fill-expense" }]} />
         </Card>
@@ -100,8 +102,8 @@ function ReportBody({ r }: { r: Report }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <CategoryTable title="Expenses by category" rows={r.expenseByCategory} fmt={fmt} upIsBad />
-        <CategoryTable title="Income by category" rows={r.incomeByCategory} fmt={fmt} />
+        <CategoryTable compare={r.period !== "all"} title="Expenses by category" rows={r.expenseByCategory} fmt={fmt} upIsBad />
+        <CategoryTable compare={r.period !== "all"} title="Income by category" rows={r.incomeByCategory} fmt={fmt} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -141,21 +143,21 @@ function ReportBody({ r }: { r: Report }) {
   );
 }
 
-function CategoryTable({ title, rows, fmt, upIsBad }: { title: string; rows: Report["expenseByCategory"]; fmt: (v: number) => string; upIsBad?: boolean }) {
+function CategoryTable({ title, rows, fmt, upIsBad, compare = true }: { title: string; rows: Report["expenseByCategory"]; fmt: (v: number) => string; upIsBad?: boolean; compare?: boolean }) {
   return (
     <Card className="min-w-0"><h2 className="mb-2 text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? <Empty>Nothing here.</Empty> : (
         <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead><tr className="text-left text-xs text-muted"><th className="py-1 font-medium">Category</th><th className="py-1 text-right font-medium">Amount</th><th className="py-1 text-right font-medium">Share</th><th className="py-1 text-right font-medium">vs previous</th></tr></thead>
+          <thead><tr className="text-left text-xs text-muted"><th className="py-1 font-medium">Category</th><th className="py-1 text-right font-medium">Amount</th><th className="py-1 text-right font-medium">Share</th>{compare && <th className="py-1 text-right font-medium">vs previous</th>}</tr></thead>
           <tbody className="divide-y divide-border">
             {rows.map((c) => (
               <tr key={c.categoryId ?? c.name}>
                 <td className="max-w-40 truncate py-1.5">{c.name}</td>
                 <td className="py-1.5 text-right tabular-nums">{fmt(c.totalMinor)}</td>
                 <td className="py-1.5 text-right tabular-nums text-muted">{c.pct.toFixed(0)}%</td>
-                <td className={cx("py-1.5 text-right tabular-nums", c.changePct === null ? "text-muted" : (c.changePct > 0) === !!upIsBad ? "text-expense" : "text-income")}>
+                {compare && <td className={cx("py-1.5 text-right tabular-nums", c.changePct === null ? "text-muted" : (c.changePct > 0) === !!upIsBad ? "text-expense" : "text-income")}>
                   {c.changePct === null ? (c.totalMinor > 0 ? "new" : "—") : `${c.changePct > 0 ? "+" : ""}${c.changePct.toFixed(0)}%`}
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>

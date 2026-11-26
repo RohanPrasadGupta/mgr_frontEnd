@@ -1621,6 +1621,8 @@ export interface components {
             tracking: "units" | "value";
             /** @enum {string} */
             costMethod: "wavg" | "fifo" | "manual";
+            convertCurrency: string | null;
+            convertRate: number | null;
             archived: boolean;
             /** Format: date-time */
             createdAt: string;
@@ -2054,7 +2056,7 @@ export interface components {
         };
         Report: {
             /** @enum {string} */
-            period: "month" | "year";
+            period: "month" | "year" | "all";
             label: string;
             /** Format: date */
             from: string;
@@ -4286,6 +4288,8 @@ export interface operations {
                     archived?: boolean;
                     /** @enum {string} */
                     tracking?: "units" | "value";
+                    convertCurrency?: string | null;
+                    convertRate?: number | null;
                     currency?: string;
                 };
             };
@@ -5508,8 +5512,8 @@ export interface operations {
     getReport: {
         parameters: {
             query: {
-                period: "month" | "year";
-                year: number;
+                period: "month" | "year" | "all";
+                year?: number;
                 month?: number;
             };
             header?: never;

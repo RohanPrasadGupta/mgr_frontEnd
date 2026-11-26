@@ -23,8 +23,26 @@ export function useChartWidth(fallback = 560): [React.RefObject<HTMLDivElement |
   return [ref, w];
 }
 
-function Caption({ children }: { children: ReactNode }) {
-  return <div role="status" aria-live="polite" className="mb-2 min-h-5 text-xs text-muted tabular-nums">{children}</div>;
+function Caption({ children, hidden }: { children: ReactNode; hidden?: boolean }) {
+  // while a point is active its details float next to it (Tip); this line stays for screen readers
+  return <div role="status" aria-live="polite" className={cx("mb-2 min-h-5 text-xs text-muted tabular-nums", hidden && "opacity-0")}>{children}</div>;
+}
+
+const dotClass = (c: string) => c.replace(/(?:fill|stroke)-/, "bg-");
+/** Floating details box beside the hovered/tapped point; flips to the left in the right part of the chart. */
+function Tip({ x, w, top = 30, title, rows }: { x: number; w: number; top?: number; title: string; rows: { label: string; value: string; dot: string }[] }) {
+  const flip = x > w * 0.6;
+  return (
+    <div aria-hidden className="pointer-events-none absolute z-10 min-w-36 rounded-xl border border-border bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur"
+      style={{ left: x, top, transform: flip ? "translateX(calc(-100% - 12px))" : "translateX(12px)" }}>
+      <div className="mb-1 font-semibold text-fg">{title}</div>
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center gap-2 whitespace-nowrap py-0.5 tabular-nums">
+          <span className={cx("size-2 shrink-0 rounded-full", r.dot)} /><span className="text-muted">{r.label}</span><span className="ml-auto pl-3 font-semibold text-fg">{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 export const NoData = ({ children = "No data for this period." }: { children?: ReactNode }) => (
   <div className="grid h-40 place-items-center rounded-xl border border-dashed border-border text-sm text-muted">{children}</div>
@@ -58,8 +76,9 @@ export function GroupedBarChart({ labels, series, format, axis, ariaLabel, heigh
   const y = (v: number) => M.top + plotH - (v / max) * plotH;
   const every = labelStep(labels.length, plotW, minLabelGap);
   return (
-    <div ref={ref}>
-      <Caption>{active !== null ? <><b className="text-fg">{labels[active]}</b>{series.map((s) => <span key={s.name} className="ml-3">{s.name}: {format(s.values[active]!)}</span>)}</> : "Tap or hover a bar for details"}</Caption>
+    <div ref={ref} className="relative">
+      <Caption hidden={active !== null}>{active !== null ? <><b className="text-fg">{labels[active]}</b>{series.map((s) => <span key={s.name} className="ml-3">{s.name}: {format(s.values[active]!)}</span>)}</> : "Tap or hover a bar for details"}</Caption>
+      {active !== null && <Tip x={M.left + group * active + group / 2} w={w} title={labels[active]!} rows={series.map((s) => ({ label: s.name, value: format(s.values[active]!), dot: dotClass(s.className) }))} />}
       <svg width={w} height={height} role="img" aria-label={ariaLabel} onPointerLeave={() => setActive(null)}>
         {ticksFor(0, max, step).map((t) => (
           <g key={t}><line x1={M.left} x2={w - M.right} y1={y(t)} y2={y(t)} className="stroke-border" strokeWidth={1} /><text x={M.left - 6} y={y(t) + 4} textAnchor="end" className={Y_LABEL}>{axis(t)}</text></g>
@@ -97,8 +116,9 @@ export function LineChart({ labels, series, format, axis, ariaLabel, height = 22
   const every = labelStep(labels.length, plotW, minLabelGap);
   const step = labels.length === 1 ? plotW : plotW / (labels.length - 1);
   return (
-    <div ref={ref}>
-      <Caption>{active !== null ? <><b className="text-fg">{labels[active]}</b>{series.map((s) => <span key={s.name} className="ml-3">{s.name}: {format(s.values[active]!)}</span>)}</> : "Tap or hover the chart for details"}</Caption>
+    <div ref={ref} className="relative">
+      <Caption hidden={active !== null}>{active !== null ? <><b className="text-fg">{labels[active]}</b>{series.map((s) => <span key={s.name} className="ml-3">{s.name}: {format(s.values[active]!)}</span>)}</> : "Tap or hover the chart for details"}</Caption>
+      {active !== null && <Tip x={x(active)} w={w} title={labels[active]!} rows={series.map((s) => ({ label: s.name, value: format(s.values[active]!), dot: dotClass(s.className) }))} />}
       <svg width={w} height={height} role="img" aria-label={ariaLabel} onPointerLeave={() => setActive(null)}>
         {ticksFor(r.min, r.max, r.step).map((t) => (
           <g key={t}><line x1={M.left} x2={w - M.right} y1={y(t)} y2={y(t)} className={t === 0 ? "stroke-muted" : "stroke-border"} strokeWidth={1} strokeDasharray={t === 0 ? "0" : "3 3"} /><text x={M.left - 6} y={y(t) + 4} textAnchor="end" className={Y_LABEL}>{axis(t)}</text></g>
@@ -137,8 +157,9 @@ export function DailyBars({ days, today, format, axis, ariaLabel, height = 200 }
   const avg = days.reduce((s, d) => s + d.value, 0) / days.length;
   const every = labelStep(days.length, plotW, 28);
   return (
-    <div ref={ref}>
-      <Caption>{active !== null ? <><b className="text-fg">{days[active]!.date}</b><span className="ml-3">{format(days[active]!.value)}</span></> : `Average per day: ${format(avg)}`}</Caption>
+    <div ref={ref} className="relative">
+      <Caption hidden={active !== null}>{active !== null ? <><b className="text-fg">{days[active]!.date}</b><span className="ml-3">{format(days[active]!.value)}</span></> : `Average per day: ${format(avg)}`}</Caption>
+      {active !== null && <Tip x={M.left + slot * active + slot / 2} w={w} title={new Date(`${days[active]!.date}T00:00:00Z`).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })} rows={[{ label: "Spent", value: format(days[active]!.value), dot: days[active]!.date === today ? "bg-primary" : "bg-expense" }, { label: "Daily average", value: format(avg), dot: "bg-warn" }]} />}
       <svg width={w} height={height} role="img" aria-label={ariaLabel} onPointerLeave={() => setActive(null)}>
         {ticksFor(0, max, step).map((t) => (<g key={t}><line x1={M.left} x2={w - M.right} y1={y(t)} y2={y(t)} className="stroke-border" /><text x={M.left - 6} y={y(t) + 4} textAnchor="end" className={Y_LABEL}>{axis(t)}</text></g>))}
         {days.map((d, i) => {

@@ -22,6 +22,18 @@ describe("GroupedBarChart", () => {
     expect(screen.getByRole("img", { name: "Income and expense" })).toBeInTheDocument();
   });
 
+  it("floats a tooltip beside the hovered group with each series' value and colour", () => {
+    const { container } = render(<GroupedBarChart {...props} series={series} />);
+    expect(container.querySelector(".backdrop-blur")).toBeNull();
+    fireEvent.pointerEnter(container.querySelector('rect[aria-label^="Mar"]')!);
+    const tip = container.querySelector(".backdrop-blur")!;
+    expect(tip).toHaveTextContent("Mar");
+    expect(tip).toHaveTextContent("Income฿0");
+    expect(tip).toHaveTextContent("Expense฿10");
+    expect(tip.querySelector(".bg-expense")).not.toBeNull();
+    expect((tip as HTMLElement).style.transform).toContain("-100%"); // right-hand bars put it on the left
+  });
+
   it("shows the exact values for a bar group on hover, and resets on leave", () => {
     const { container } = render(<GroupedBarChart {...props} series={series} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tap or hover");

@@ -8,7 +8,7 @@ import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, qk, useAllTrades, useMe, useMutate, usePortfolio } from "@/lib/api/hooks";
 import type { AssetClass, Body, CostMethod, Holding, Trade } from "@/lib/api/types";
 import { CLASS_BORDER, CLASS_DOT, CLASS_FILL, CLASS_LABEL, CLASS_STROKE, CLASS_TEXT, CLASS_VAR, RECORD_CHOICE, amountOnlyTrade, defaultTracking, entryLabel, isInflow } from "@/lib/investments";
-import { assetIndex, classesOf, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital, type ClassTotals, type PerCurrency } from "@/lib/invest-board";
+import { assetIndex, classesOf, portfolioValue, shownIn, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital, type ClassTotals, type PerCurrency } from "@/lib/invest-board";
 import { compact, toSlices } from "@/lib/chart-utils";
 import { DonutChart, GroupedBarChart, LineChart, NoData } from "./charts";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, toMajor } from "@/lib/money";
@@ -103,8 +103,12 @@ function CurrencyChips({ list, value, onChange }: { list: string[]; value: strin
 }
 
 function Overview({ p, trades, tradesError, onOpen }: { p: Portfolio; trades?: Trade[]; tradesError: unknown; onOpen: (t: Tab) => void }) {
-  const base = p.baseCurrency;
   const totals = totalsByClass(p.holdings);
+  const worth = portfolioValue(p.holdings);
+  const byCur = new Map<string, number>();
+  for (const h of p.holdings) { const c = shownIn(h.asset).cur; byCur.set(c, (byCur.get(c) ?? 0) + 1); }
+  const [allocCur, setAllocCur] = useState<string | null>(null);
+  const aCur = allocCur && worth[allocCur] !== undefined ? allocCur : Object.keys(worth)[0];
   const assets = assetIndex(p.holdings);
   const months = lastMonths(today(), 12);
   const curs = trades ? currenciesOf(trades, assets) : [];
@@ -112,22 +116,17 @@ function Overview({ p, trades, tradesError, onOpen }: { p: Portfolio; trades?: T
   const chartCur = cur && curs.includes(cur) ? cur : curs[0];
   const monthly = trades && chartCur ? monthlyCapital(trades, assets, chartCur, months) : {};
   const maxEntries = Math.max(1, ...totals.map((t) => t.entries));
-  const slices = toSlices(p.allocation.map((a) => ({ label: CLASS_LABEL[a.class], value: a.valueMinor })), p.allocation.map((a) => CLASS_VAR[a.class]), 8);
+  const slices = aCur ? toSlices(totals.filter((c) => c.value[aCur]).map((c) => ({ label: CLASS_LABEL[c.cls], value: c.value[aCur]! })), totals.filter((c) => c.value[aCur]).map((c) => CLASS_VAR[c.cls]), 8) : [];
   return (
     <>
-      <section aria-label="Portfolio summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Portfolio value" value={formatMoney(p.marketValueMinor, base)} />
-        <Stat label="Invested (cost)" value={formatMoney(p.investedMinor, base)} />
-        <Stat label="Unrealised P/L" value={formatMoney(p.unrealisedPnlMinor, base, { sign: true })} cls={tone(p.unrealisedPnlMinor)} />
-        <Stat label="Realised P/L" value={formatMoney(p.realisedPnlMinor, base, { sign: true })} cls={tone(p.realisedPnlMinor)} sub={p.dividendsMinor ? `+ ${formatMoney(p.dividendsMinor, base)} dividends` : undefined} />
+      {/* One total per currency: investments are only added up when they're in (or converted to) the same currency. */}
+      <section aria-label="Portfolio value" className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
+        {Object.entries(worth).length === 0 ? <Stat label="Portfolio value" value="—" sub="nothing invested yet" /> : Object.entries(worth).map(([c, v]) => (
+          <Stat key={c} label={Object.keys(worth).length > 1 ? `Portfolio value · ${c}` : "Portfolio value"} value={formatMoney(v, c)}
+            sub={`${byCur.get(c) ?? 0} ${(byCur.get(c) ?? 0) === 1 ? "holding" : "holdings"} · latest prices, else cost`} />
+        ))}
       </section>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-        <span>Annualised return (XIRR): <b className={cx("text-fg", tone(p.xirrPct))}>{formatPct(p.xirrPct, true)}</b></span>
-        {p.approximate && <span>Totals above are in {base}, converted at today&apos;s FX rate{!p.pricedAll && "; holdings without a price are counted at cost"}.</span>}
-      </div>
-      {p.excluded.length > 0 && (
-        <div role="status" className="rounded-xl border border-warn/40 bg-warn/10 p-3 text-sm text-warn">Not included in the {base} totals: {p.excluded.map((e) => `${e.symbol} (${e.reason})`).join(", ")}.</div>
-      )}
+      {Object.keys(worth).length > 1 && <p className="text-xs text-muted">Different currencies are kept apart. To see one total, add a conversion on an asset (its page → “Show in another currency”).</p>}
 
       <section aria-label="By type" className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-3">
         {totals.map((t) => <ClassCard key={t.cls} t={t} onOpen={() => onOpen(t.cls)} />)}
@@ -135,8 +134,8 @@ function Overview({ p, trades, tradesError, onOpen }: { p: Portfolio; trades?: T
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Card>
-          <h2 className="mb-3 text-sm font-semibold">Allocation <span className="font-normal text-muted">({base})</span></h2>
-          <DonutChart slices={slices} centerLabel="Total" centerValue={formatMoney(p.marketValueMinor, base)} format={(v) => formatMoney(v, base)} ariaLabel="Allocation by investment type" />
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">Allocation{aCur && <span className="font-normal text-muted"> ({aCur})</span>}</h2><CurrencyChips list={Object.keys(worth)} value={aCur ?? ""} onChange={setAllocCur} /></div>
+          <DonutChart slices={slices} centerLabel="Total" centerValue={aCur ? formatMoney(worth[aCur]!, aCur) : "—"} format={(v) => formatMoney(v, aCur!)} ariaLabel="Allocation by investment type" />
         </Card>
         <Card>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -340,6 +339,7 @@ function HoldingRow({ h }: { h: Holding }) {
               <span className="text-xs text-muted">{CLASS_LABEL[a.class]} · {a.currency}</span>
             </div>
             <div className="truncate text-sm text-primary">{a.name}</div>
+            {a.convertCurrency && a.convertRate && <div className="text-xs text-muted">Counted in {a.convertCurrency} · 1 {a.currency} = {a.convertRate} {a.convertCurrency} · ≈ {formatMoney(Math.round(h.remainingCostMinor * shownIn(a).k), a.convertCurrency)} at stake</div>}
             <div className="text-xs text-muted">
               {h.tradeCount} {h.tradeCount === 1 ? "entry" : "entries"}{units && <> · {h.closed ? "0 units (closed)" : `${formatQty(h.quantity)} units`}</>}{!units && h.quantity > 0 && <> · {formatQty(h.quantity)} units noted</>}
             </div>

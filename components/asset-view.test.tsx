@@ -129,4 +129,21 @@ describe("asset trades", () => {
     await u.selectOptions(screen.getByLabelText("Recorded by"), "units");
     await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ tracking: "units" }));
   });
+
+  it("adds a conversion: counted in another currency at the rate entered", async () => {
+    const m = mockFetch(routes({
+      [`PATCH /investments/assets/${ID}`]: { data: { ...asset, convertCurrency: "NPR", convertRate: 4.18 } },
+      "GET /me": { data: { id: ID, email: "a@b.co", name: "A", baseCurrency: "THB", currencies: ["THB", "NPR"], timezone: "Asia/Bangkok", locale: "en", weekStart: 1, emailVerified: true } },
+      "GET /currencies": { data: ["THB", "NPR"].map((code) => ({ code, name: code, symbol: code, minorUnit: 2 })) },
+    }));
+    renderWithClient(<AssetView />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole("button", { name: "Add conversion" }));
+    const showIn = screen.getByLabelText("Show in");
+    await waitFor(() => expect(within(showIn).getAllByRole("option").length).toBeGreaterThan(2));
+    await u.selectOptions(showIn, "NPR");
+    await u.type(screen.getByLabelText(/^Rate: 1 THB =/), "4.18");
+    await u.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ convertCurrency: "NPR", convertRate: 4.18 }));
+  });
 });

@@ -127,6 +127,17 @@ describe("ReportsView", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Yearly" }));
     await waitFor(() => expect(m.urls("/reports").at(-1)).toMatch(/period=year&year=\d{4}$/));
   });
+  it("has an All time report: no period picker, no comparison", async () => {
+    const all = { ...report, period: "all" as const, label: "All time", from: "2021-03-10", previous: { incomeMinor: 0, expenseMinor: 0, netMinor: 0 } };
+    const m = mockFetch({ ...baseRoutes, "GET /reports": ({ url }: { url: URL }) => ({ data: url.searchParams.get("period") === "all" ? all : report }) });
+    renderWithClient(<ReportsView />);
+    await screen.findByRole("region", { name: "Totals" });
+    await userEvent.click(screen.getByRole("radio", { name: "All time" }));
+    await waitFor(() => expect(m.urls("/reports").at(-1)).toMatch(/period=all$/));
+    expect(await screen.findByText(/everything recorded up to today/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Previous month" })).toBeNull();
+    expect(screen.queryByText(/vs previous/)).toBeNull();
+  });
   it("CSV export neutralises spreadsheet formulas and quotes properly", () => {
     const csv = reportCsv(report);
     expect(csv).toContain(`"'=cmd|' /C calc'!A0"`.replace(/^"|"$/g, "")); // prefixed with '

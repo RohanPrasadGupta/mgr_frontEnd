@@ -85,6 +85,7 @@ export function AssetView() {
 
       {actionError && <ErrorNote error={new Error(actionError)} />}
       <PriceCard h={h} />
+      <ConversionCard h={h} />
 
       <Card>
         <h2 className="mb-2 text-sm font-semibold">{units || amountOnlyTrade(a) ? "Trades" : "Contributions & withdrawals"}</h2>
@@ -282,5 +283,52 @@ function Switch({ checked, onChange, label, disabled }: { checked: boolean; onCh
       className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50", checked ? "bg-primary" : "bg-border")}>
       <span className={cx("inline-block size-4 rounded-full bg-card shadow transition", checked ? "translate-x-4.5" : "translate-x-0.5")} />
     </button>
+  );
+}
+
+/**
+ * Optional: count this asset in another currency at a rate the user enters (e.g. THB crypto shown in NPR).
+ * Entries stay in the asset's own currency; the board totals and the portfolio use this rate instead of daily FX.
+ */
+function ConversionCard({ h }: { h: Holding }) {
+  const a = h.asset;
+  const on = !!a.convertCurrency && !!a.convertRate;
+  const [editing, setEditing] = useState(false);
+  const [to, setTo] = useState(a.convertCurrency ?? "");
+  const [rate, setRate] = useState(a.convertRate ? String(a.convertRate) : "");
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutate((body: Body<"/investments/assets/{id}", "patch">) => call(client.PATCH("/investments/assets/{id}", { params: { path: { id: a.id } }, body })), async (qc) => { await invalidateInvestments(qc); await qc.invalidateQueries({ queryKey: ["me"] }); }, "Conversion saved");
+  const k = on ? a.convertRate! * 10 ** (minorUnit(a.convertCurrency!) - minorUnit(a.currency)) : 0;
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setError(null);
+    if (!to || to === a.currency) return setError(`Pick a currency other than ${a.currency}`);
+    if (!(Number(rate) > 0)) return setError("Enter a rate greater than 0");
+    try { await save.mutateAsync({ convertCurrency: to, convertRate: Number(rate) }); setEditing(false); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
+  }
+  async function remove() { setError(null); try { await save.mutateAsync({ convertCurrency: null, convertRate: null }); setTo(""); setRate(""); setEditing(false); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Show in another currency</h2>
+          {on ? (
+            <p className="mt-0.5 text-sm text-muted">1 {a.currency} = {a.convertRate} {a.convertCurrency} · capital at stake ≈ <b className="text-fg">{formatMoney(Math.round(h.remainingCostMinor * k), a.convertCurrency!)}</b>. Totals count this asset in {a.convertCurrency} at your rate.</p>
+          ) : (
+            <p className="mt-0.5 text-sm text-muted">Entries stay in {a.currency}. Add a rate to count this asset in another currency (e.g. your portfolio currency) instead of the daily exchange rate.</p>
+          )}
+        </div>
+        {!editing && <Button variant="ghost" onClick={() => setEditing(true)}>{on ? "Change" : "Add conversion"}</Button>}
+      </div>
+      {editing && (
+        <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-3">
+          <Field label="Show in"><Select value={to} onChange={(e) => setTo(e.target.value)} className="w-32" required><option value="">Choose…</option><CurrencyOptions current={to || undefined} /></Select></Field>
+          <Field label={`Rate: 1 ${a.currency} =`} hint={to ? `${to} per ${a.currency}` : undefined}><Input type="number" step="any" min="0" required value={rate} onChange={(e) => setRate(e.target.value)} className="w-36" placeholder="e.g. 4.18" /></Field>
+          <Button type="submit" loading={save.isPending}>Save</Button>
+          <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null); }}>Cancel</Button>
+          {on && <Button type="button" variant="ghost" className="text-expense" onClick={remove} disabled={save.isPending}>Remove conversion</Button>}
+        </form>
+      )}
+      {error && <div className="mt-2"><ErrorNote error={new Error(error)} /></div>}
+    </Card>
   );
 }

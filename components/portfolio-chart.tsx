@@ -5,7 +5,7 @@ import { compact } from "@/lib/chart-utils";
 import { formatMoney, toMajor } from "@/lib/money";
 import { LineChart } from "./charts";
 import { Widget } from "./widget";
-import { Segmented } from "./ui";
+import { Segmented, cx } from "./ui";
 
 const RANGES = [{ value: "6", label: "6M" }, { value: "12", label: "1Y" }, { value: "36", label: "3Y" }, { value: "60", label: "5Y" }] as const;
 type Range = (typeof RANGES)[number]["value"];
@@ -33,10 +33,17 @@ export function PortfolioChart() {
         <p className="py-8 text-center text-sm text-muted">{pts.length === 0 ? "Record a trade or contribution to start the history." : "The chart appears once there are two months of history."}</p>
       ) : (
         <>
-          {gainPct !== null && <p className="mb-1 text-xs text-muted">Now <b className={gain >= 0 ? "text-income" : "text-expense"}>{formatMoney(gain, cur, { sign: true })} ({gain >= 0 ? "+" : ""}{gainPct.toFixed(1)}%)</b> {gain >= 0 ? "above" : "below"} what you&apos;ve put in</p>}
+          {last && (
+            <dl className="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+              <div><dt className="inline">Value now </dt><dd className="inline font-semibold text-fg tabular-nums">{formatMoney(last.valueMinor, cur)}</dd></div>
+              <div><dt className="inline">Put in </dt><dd className="inline font-semibold text-fg tabular-nums">{formatMoney(last.investedMinor, cur)}</dd></div>
+              <div><dt className="inline">Gain </dt><dd className={cx("inline font-semibold tabular-nums", gain > 0 ? "text-income" : gain < 0 ? "text-expense" : "text-fg")}>{formatMoney(gain, cur, { sign: true })}{gainPct !== null ? ` (${gain >= 0 ? "+" : ""}${gainPct.toFixed(1)}%)` : ""}</dd></div>
+              {gain === 0 && <div>— add current prices on your assets to see gains; without a price, a holding counts at what it cost.</div>}
+            </dl>
+          )}
           <LineChart labels={pts.map((p) => label(p.date, withYear))} ariaLabel={`Portfolio value and invested amount, last ${pts.length} months`}
             format={(v) => formatMoney(v, cur)} axis={(v) => compact(toMajor(v, cur))}
-            series={[{ name: "Value", values: pts.map((p) => p.valueMinor), className: "stroke-primary", stroke: "area" }, { name: "Invested", values: pts.map((p) => p.investedMinor), className: "stroke-muted" }]} />
+            series={[{ name: "Value", values: pts.map((p) => p.valueMinor), className: "stroke-primary", stroke: "area" }, { name: "Invested", values: pts.map((p) => p.investedMinor), className: "stroke-chart-2" }]} />
           <p className="mt-2 text-xs text-muted">From your trades and the prices you enter (no market data). Holdings without a price count at cost.{h!.excluded.length > 0 && ` Not included: ${h!.excluded.map((e) => e.symbol).join(", ")} (no exchange rate).`}</p>
         </>
       )}
