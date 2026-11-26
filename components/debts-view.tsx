@@ -1,13 +1,14 @@
 "use client";
 import { useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { invalidateDebts, useCurrencies, useDebt, useDebtSummary, useDebts, useMe, useMutate } from "@/lib/api/hooks";
+import { invalidateDebts, useDebt, useDebtSummary, useDebts, useMe, useMutate } from "@/lib/api/hooks";
 import type { Debt } from "@/lib/api/types";
 import { formatDate, todayIso } from "@/lib/dates";
 import { formatMoney, minorUnit, toMajor, toMinor } from "@/lib/money";
 import { useConfirm } from "./feedback";
 import { RowActions } from "./row-actions";
 import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Segmented, Select, Skeleton, cx } from "./ui";
+import { CurrencyOptions } from "./currency-options";
 
 const step = (c: string) => (minorUnit(c) === 0 ? "1" : "0.01");
 
@@ -86,7 +87,6 @@ export function DebtsView() {
 
 function DebtDialog({ state, onClose }: { state: Debt | "new" | null; onClose: () => void }) {
   const { data: me } = useMe();
-  const currencies = useCurrencies();
   const edit = state && state !== "new" ? state : null;
   const [direction, setDirection] = useState<"lent" | "borrowed">("lent");
   const [currency, setCurrency] = useState("");
@@ -100,7 +100,7 @@ function DebtDialog({ state, onClose }: { state: Debt | "new" | null; onClose: (
     const counterparty = String(f.get("who")).trim();
     if (edit) return call(client.PATCH("/debts/{id}", { params: { path: { id: edit.id } }, body: { counterparty, principalMinor, dueOn: dueOn ?? null, note: note ?? null } }));
     return call(client.POST("/debts", { body: { direction, counterparty, principalMinor, currency: cur, startedOn: String(f.get("start") || "") || undefined, dueOn, note } }));
-  }, invalidateDebts, edit ? "Debt updated" : "Debt recorded");
+  }, async (qc) => { await invalidateDebts(qc); await qc.invalidateQueries({ queryKey: ["me"] }); }, edit ? "Debt updated" : "Debt recorded");
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(null);
     try { await save.mutateAsync(new FormData(e.currentTarget)); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
@@ -114,7 +114,7 @@ function DebtDialog({ state, onClose }: { state: Debt | "new" | null; onClose: (
           <Field label="Amount"><Input name="amount" type="number" min="0" step={step(cur)} required defaultValue={edit ? toMajor(edit.principalMinor, edit.currency) : ""} /></Field>
           <Field label="Currency">
             <Select value={cur} disabled={!!edit} onChange={(e) => setCurrency(e.target.value)}>
-              {(currencies.data ?? [{ code: cur }]).map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+              <CurrencyOptions current={cur} />
             </Select>
           </Field>
         </div>

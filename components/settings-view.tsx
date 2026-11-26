@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
@@ -9,6 +10,7 @@ import { DeleteAccountCard } from "./delete-account";
 import { ChangePasswordCard } from "./change-password";
 import { Button, Card, ErrorNote, Field, Input, Segmented, Select, Skeleton } from "./ui";
 import { useConfirm } from "./feedback";
+import { CurrencyOptions } from "./currency-options";
 
 type Theme = "system" | "light" | "dark";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -25,7 +27,6 @@ function applyTheme(t: Theme) {
 export function SettingsView() {
   const confirm = useConfirm();
   const { data: me, isPending, error } = useMe();
-  const currencies = useCurrencies();
   const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "system" as Theme); // saved choice; "system" on the server
   const [name, setName] = useState("");
   const [baseCurrency, setBaseCurrency] = useState("");
@@ -78,8 +79,7 @@ export function SettingsView() {
           <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} /></Field>
           <Field label="Base currency" hint="Totals and charts are shown in this currency.">
             <Select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)}>
-              {currencies.data?.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
-              {!currencies.data && <option value={baseCurrency}>{baseCurrency}</option>}
+              <CurrencyOptions current={baseCurrency} names />
             </Select>
           </Field>
           {currencyChanged && <p role="alert" className="rounded-lg bg-warn/10 p-2 text-xs text-warn">Changing the base currency does not convert your existing transactions, so past totals will mix currencies.</p>}
@@ -91,10 +91,50 @@ export function SettingsView() {
         </form>
       </Card>
 
+      <MyCurrenciesCard />
+
       <ChangePasswordCard />
 
       <p className="text-sm text-muted"><Link href="/privacy" className="text-primary underline">Privacy policy</Link></p>
       <DeleteAccountCard />
     </div>
+  );
+}
+
+/** The currencies offered first in every picker. The base currency is always included and can't be removed here. */
+export function MyCurrenciesCard() {
+  const qc = useQueryClient();
+  const { data: me } = useMe();
+  const { data: all } = useCurrencies();
+  const [add, setAdd] = useState("");
+  const save = useMutate((currencies: string[]) => call(client.PATCH("/me", { body: { currencies } })), (q) => q.invalidateQueries({ queryKey: qk.me }), "Currencies updated");
+  if (!me) return null;
+  const names = new Map((all ?? []).map((c) => [c.code, c.name]));
+  const others = (all ?? []).filter((c) => !me.currencies.includes(c.code)).sort((a, b) => a.code.localeCompare(b.code));
+  const set = async (next: string[]) => { await save.mutateAsync(next).catch(() => undefined); await qc.invalidateQueries({ queryKey: qk.me }); };
+  return (
+    <Card>
+      <h2 className="text-sm font-semibold">My currencies</h2>
+      <p className="mb-3 mt-1 text-sm text-muted">Shown first whenever you pick a currency. Using another currency adds it here automatically.</p>
+      <ul className="mb-3 flex flex-wrap gap-2" aria-label="Your currencies">
+        {me.currencies.map((code) => (
+          <li key={code} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-sm">
+            <span className="font-medium">{code}</span><span className="text-muted">{names.get(code) ?? ""}</span>
+            {code === me.baseCurrency ? <span className="text-xs text-muted">· base</span> : (
+              <button type="button" aria-label={`Remove ${code}`} disabled={save.isPending} onClick={() => set(me.currencies.filter((c) => c !== code))} className="ml-0.5 rounded-full px-1 text-muted hover:bg-border/60 hover:text-expense">✕</button>
+            )}
+          </li>
+        ))}
+      </ul>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={async (e) => { e.preventDefault(); if (!add) return; await set([...me.currencies, add]); setAdd(""); }}>
+        <Field label="Add a currency">
+          <Select value={add} onChange={(e) => setAdd(e.target.value)} className="w-64 max-w-full">
+            <option value="">Choose…</option>
+            {others.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+          </Select>
+        </Field>
+        <Button type="submit" variant="ghost" disabled={!add} loading={save.isPending}>Add</Button>
+      </form>
+    </Card>
   );
 }

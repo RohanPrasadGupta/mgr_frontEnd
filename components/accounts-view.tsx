@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { qk, useAccounts, useCurrencies, useMe, useMutate } from "@/lib/api/hooks";
+import { qk, useAccounts, useMe, useMutate } from "@/lib/api/hooks";
 import type { Account, AccountType, Body } from "@/lib/api/types";
 import { formatMoney, toMinor } from "@/lib/money";
 import { TransferDialog } from "./transfer-dialog";
 import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
+import { CurrencyOptions } from "./currency-options";
 
 const TYPES: AccountType[] = ["cash", "bank", "wallet", "card", "loan", "investment"];
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalidateQueries({ queryKey: qk.accounts });
@@ -14,7 +15,6 @@ const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalida
 export function AccountsView() {
   const confirm = useConfirm();
   const accounts = useAccounts();
-  const currencies = useCurrencies();
   const { data: me } = useMe();
   const [open, setOpen] = useState(false);
   const [transferFrom, setTransferFrom] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function AccountsView() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [type, setType] = useState<AccountType>("bank");
 
-  const create = useMutate((body: Body<"/accounts", "post">) => call(client.POST("/accounts", { body })), refresh, "Account added");
+  const create = useMutate((body: Body<"/accounts", "post">) => call(client.POST("/accounts", { body })), async (qc) => { await refresh(qc); await qc.invalidateQueries({ queryKey: qk.me }); }, "Account added");
   const update = useMutate(({ id, body }: { id: string; body: Body<"/accounts/{id}", "patch"> }) => call(client.PATCH("/accounts/{id}", { params: { path: { id } }, body })), refresh, "Account updated");
   const remove = useMutate((id: string) => call(client.DELETE("/accounts/{id}", { params: { path: { id } } })), refresh, "Account deleted");
 
@@ -71,7 +71,7 @@ export function AccountsView() {
         <form onSubmit={submit} className="space-y-3">
           <Field label="Name"><Input name="name" required maxLength={60} autoFocus /></Field>
           <Field label="Type"><Select value={type} onChange={(e) => setType(e.target.value as AccountType)}>{TYPES.map((t) => <option key={t} value={t} className="capitalize">{t}</option>)}</Select></Field>
-          <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}>{currencies.data?.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</Select></Field>
+          <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}><CurrencyOptions current={me?.baseCurrency} names /></Select></Field>
           <Field label="Opening balance"><Input name="opening" type="number" step="0.01" defaultValue="0" /></Field>
           {error && <ErrorNote error={new Error(error)} />}
           <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={create.isPending}>Add</Button></div>

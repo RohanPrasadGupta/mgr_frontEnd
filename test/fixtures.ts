@@ -1,6 +1,6 @@
 import type { Account, Category, Currency, User } from "@/lib/api/types";
 
-export const me: User = { id: "u1", email: "me@example.com", name: "Me", baseCurrency: "THB", timezone: "Asia/Bangkok", locale: "en", weekStart: 1, emailVerified: true };
+export const me: User = { id: "u1", email: "me@example.com", name: "Me", baseCurrency: "THB", currencies: ["THB", "NPR"], timezone: "Asia/Bangkok", locale: "en", weekStart: 1, emailVerified: true };
 const acct = (id: string, name: string, currency: string, balanceMinor: number, extra: Partial<Account> = {}): Account =>
   ({ id, userId: "u1", name, type: "bank", currency, openingBalanceMinor: 0, balanceMinor, includeInNetWorth: true, archived: false, icon: null, color: null, sort: 0, createdAt: "2025-01-01T00:00:00.000Z", updatedAt: "2025-01-01T00:00:00.000Z", deletedAt: null, ...extra });
 export const cash = acct("a-cash", "Cash", "THB", 100_000, { type: "cash" });

@@ -25,6 +25,14 @@ export function AssetView() {
   const [actionError, setActionError] = useState<string | null>(null);
   const patch = useMutate((body: Body<"/investments/assets/{id}", "patch">) => call(client.PATCH("/investments/assets/{id}", { params: { path: { id } }, body })), invalidateInvestments, "Asset updated");
   const remove = useMutate(() => call(client.DELETE("/investments/assets/{id}", { params: { path: { id } } })), invalidateInvestments, "Asset deleted");
+  // The trade id is the mutation's argument, so the request always targets the row whose Delete was pressed.
+  const removeTrade = useMutate((tradeId: string) => call(client.DELETE("/investments/trades/{id}", { params: { path: { id: tradeId } } })), invalidateInvestments, "Entry deleted");
+  const [deleting, setDeleting] = useState<string | null>(null);
+  async function deleteTrade(t: Trade) {
+    if (!(await confirm({ message: `Delete this ${TYPE_LABEL[t.type].toLowerCase()} from ${fmtDate(t.tradedOn)}?`, destructive: true }))) return;
+    setDeleting(t.id);
+    try { await act(() => removeTrade.mutateAsync(t.id)); } finally { setDeleting(null); }
+  }
 
   if (holding.isPending) return <PageSkeleton />;
   if (holding.error) return <div className="space-y-3"><Link href="/investments" className="text-sm text-primary underline">← Investments</Link><ErrorNote error={holding.error} retry={() => holding.refetch()} /></div>;
@@ -76,15 +84,17 @@ export function AssetView() {
         {trades.isPending ? <ListSkeleton rows={3} /> : trades.error ? <ErrorNote error={trades.error} /> : trades.data.length === 0 ? <Empty>Nothing recorded yet.</Empty> : (
           <ul className="divide-y divide-border">
             {trades.data.map((t) => (
-              <li key={t.id}>
-                <button onClick={() => setDialog({ trade: t })} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-border/40">
-                  <span className="w-20 shrink-0 text-xs text-muted">{fmtDate(t.tradedOn)}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{TYPE_LABEL[t.type]}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
-                    <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, a.costMethod === "manual" && t.type === "buy" && t.includeInAvg ? "in average" : null].filter(Boolean).join(" · ")}</span>
-                  </span>
-                  <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : isInflow(t.type) ? "text-income" : "")}>{t.type === "bonus" ? "free" : `${isInflow(t.type) ? "+" : "−"}${formatMoney(t.amountMinor, cur)}`}</span>
-                </button>
+              <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2.5">
+                <span className="w-20 shrink-0 text-xs text-muted">{fmtDate(t.tradedOn)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{TYPE_LABEL[t.type]}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
+                  <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, a.costMethod === "manual" && t.type === "buy" && t.includeInAvg ? "in average" : null].filter(Boolean).join(" · ")}</span>
+                </span>
+                <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : isInflow(t.type) ? "text-income" : "")}>{t.type === "bonus" ? "free" : `${isInflow(t.type) ? "+" : "−"}${formatMoney(t.amountMinor, cur)}`}</span>
+                <span className="ml-auto flex shrink-0 gap-1">
+                  <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDialog({ trade: t })} disabled={a.archived} aria-label={`Edit ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Edit</Button>
+                  <Button variant="ghost" className="px-2.5 py-1 text-xs text-expense" onClick={() => deleteTrade(t)} loading={deleting === t.id} disabled={a.archived || (deleting !== null && deleting !== t.id)} aria-label={`Delete ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Delete</Button>
+                </span>
               </li>
             ))}
           </ul>
@@ -155,7 +165,6 @@ function PriceCard({ h }: { h: Holding }) {
 }
 
 function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding: Holding; trade?: Trade; onClose: () => void }) {
-  const confirm = useConfirm();
   const a = holding.asset;
   const units = a.tracking === "units";
   const options = TYPES_FOR[a.tracking];
@@ -190,19 +199,34 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
     if (priced) { if (!(Number(price) > 0)) throw new Error("Enter a price greater than 0"); body.priceMinor = Number((Number(price) * unit).toFixed(6)); }
     if (!qtyType) { if (!(Number(amount) > 0)) throw new Error("Enter an amount greater than 0"); body.amountMinor = toMinor(Number(amount), a.currency); }
     if (a.costMethod === "manual" && type === "buy") body.includeInAvg = inAvg;
+    if (trade && type !== trade.type) body.type = type;
     return trade
       ? call(client.PATCH("/investments/trades/{id}", { params: { path: { id: trade.id } }, body }))
       : call(client.POST("/investments/trades", { body: { ...body, note: note || undefined, assetId: a.id, type, clientId: crypto.randomUUID() } }));
   }, invalidateInvestments, trade ? "Entry updated" : "Entry added");
-  const del = useMutate(() => call(client.DELETE("/investments/trades/{id}", { params: { path: { id: trade!.id } } })), invalidateInvestments, "Entry deleted");
 
   async function submit(e: React.FormEvent) { e.preventDefault(); setError(null); try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
-  async function remove() { if (!(await confirm({ message: "Delete this entry?", destructive: true }))) return; try { await del.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
+  /** Switching between kinds keeps what still applies: a buy turned into a dividend starts from the buy's total. */
+  function pickType(next: TradeType) {
+    const nextQty = next === "buy" || next === "sell" || next === "bonus";
+    if (!nextQty && !amount && total !== null) setAmount(String(toMajor(total, a.currency)));
+    setType(next);
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title={trade ? `Edit ${TYPE_LABEL[trade.type].toLowerCase()}` : units ? "Add trade" : "Add entry"}>
+    <Modal open={open} onClose={onClose} title={trade ? "Edit entry" : units ? "Add trade" : "Add entry"}>
       <form onSubmit={submit} className="space-y-3">
-        {!trade && <Field label="Type"><Select value={type} onChange={(e) => setType(e.target.value as TradeType)}>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></Field>}
+        <fieldset>
+          <legend className="mb-1.5 text-xs font-medium text-muted">Type</legend>
+          <div role="radiogroup" aria-label="Type" className="flex flex-wrap gap-2">
+            {options.map((o) => (
+              <label key={o.value} className={cx("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition", type === o.value ? "border-primary bg-primary/10 text-fg" : "border-border text-muted hover:text-fg")}>
+                <input type="radio" name="trade-type" value={o.value} checked={type === o.value} onChange={() => pickType(o.value)} className="accent-[var(--primary)]" />
+                {o.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         {qtyType && <Field label="Quantity"><Input type="number" step="any" min="0" required value={qty} onChange={(e) => setQty(e.target.value)} autoFocus /></Field>}
         {priced && <Field label={`Price per unit (${a.currency})`} hint={total === null ? undefined : `Total ${formatMoney(total, a.currency)}`}><Input type="number" step="any" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} /></Field>}
         {!qtyType && <Field label={`Amount (${a.currency})`}><Input type="number" step="0.01" min="0" required value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></Field>}
@@ -213,10 +237,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inAvg} onChange={(e) => setInAvg(e.target.checked)} />Use this buy for the displayed average price</label>
         )}
         {error && <ErrorNote error={new Error(error)} />}
-        <div className="flex items-center justify-between pt-2">
-          {trade ? <Button type="button" variant="danger" onClick={remove} loading={del.isPending}>Delete</Button> : <span />}
-          <div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
-        </div>
+        <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
       </form>
     </Modal>
   );

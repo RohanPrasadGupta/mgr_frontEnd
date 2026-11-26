@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { invalidateInvestments, useCurrencies, useMe, useMutate, usePortfolio } from "@/lib/api/hooks";
+import { invalidateInvestments, qk, useMe, useMutate, usePortfolio } from "@/lib/api/hooks";
 import type { AssetClass, Body, CostMethod, Holding } from "@/lib/api/types";
 import { CLASS_DOT, CLASS_LABEL, defaultTracking } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, Modal, PageSkeleton, Select, cx } from "./ui";
 import { PortfolioChart } from "./portfolio-chart";
+import { CurrencyOptions } from "./currency-options";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 
@@ -118,10 +119,9 @@ function HoldingRow({ h }: { h: Holding }) {
 const CLASSES = Object.keys(CLASS_LABEL) as AssetClass[];
 export function AssetDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: me } = useMe();
-  const currencies = useCurrencies();
   const [cls, setCls] = useState<AssetClass>("stock");
   const [error, setError] = useState<string | null>(null);
-  const create = useMutate((body: Body<"/investments/assets", "post">) => call(client.POST("/investments/assets", { body })), invalidateInvestments, "Asset added");
+  const create = useMutate((body: Body<"/investments/assets", "post">) => call(client.POST("/investments/assets", { body })), async (qc) => { await invalidateInvestments(qc); await qc.invalidateQueries({ queryKey: qk.me }); }, "Asset added");
   const units = defaultTracking(cls) === "units";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -140,7 +140,7 @@ export function AssetDialog({ open, onClose }: { open: boolean; onClose: () => v
           <Field label="Type"><Select value={cls} onChange={(e) => setCls(e.target.value as AssetClass)}>{CLASSES.map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Symbol / short name"><Input name="symbol" required maxLength={30} placeholder={units ? "e.g. ACME" : "e.g. GROWTH-SIP"} autoFocus /></Field>
-            <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}>{currencies.data?.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}</Select></Field>
+            <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}><CurrencyOptions current={me?.baseCurrency} /></Select></Field>
           </div>
           <Field label="Name"><Input name="name" required maxLength={100} placeholder={units ? "e.g. Acme Corporation" : "e.g. Example Growth Fund"} /></Field>
           {units ? (
