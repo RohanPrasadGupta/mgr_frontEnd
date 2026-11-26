@@ -96,4 +96,37 @@ describe("asset trades", () => {
     await u.click(within(dialog).getByRole("button", { name: "Use NPR" }));
     await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ currency: "NPR" }));
   });
+
+  it("amount-only crypto: Buy / Sell with amount + fee, quantity optional (with the implied price), and 'Recorded by' while empty", async () => {
+    const coin = { ...asset, symbol: "BTC", class: "crypto", tracking: "value" };
+    const m = mockFetch({
+      [`GET /investments/assets/${ID}`]: { data: { ...holding, asset: coin, quantity: 0 } },
+      "GET /investments/trades": { data: [] },
+      [`GET /investments/assets/${ID}/prices`]: { data: [] },
+      "POST /investments/trades": { data: trade("55555555-5555-4555-8555-555555555555", { type: "contribution" }) },
+      [`PATCH /investments/assets/${ID}`]: { data: { ...coin, tracking: "units" } },
+    });
+    renderWithClient(<AssetView />);
+    const u = userEvent.setup();
+    expect(await screen.findByLabelText("Recorded by")).toHaveValue("value");
+    await u.click(screen.getByRole("button", { name: "+ Add trade" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByRole("radio").map((r) => r.parentElement!.textContent)).toEqual(["Buy", "Sell", "Dividend", "Fee"]);
+    await u.type(within(dialog).getByLabelText(/^Amount/), "500");
+    await u.type(within(dialog).getByLabelText(/^Fee \/ charge/), "18.18");
+    await u.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("POST", "/investments/trades")!.body).toMatchObject({ type: "contribution", amountMinor: 50_000, feeMinor: 1_818 }));
+    expect(m.last("POST", "/investments/trades")!.body.quantity).toBeUndefined(); // no quantity given
+
+    await u.click(screen.getByRole("button", { name: "+ Add trade" }));
+    const again = await screen.findByRole("dialog");
+    await u.type(within(again).getByLabelText(/^Amount/), "800");
+    await u.type(within(again).getByLabelText(/^Quantity/), "0.004");
+    expect(within(again).getByText(/≈ THB\s?200,000/)).toBeInTheDocument(); // implied price per unit
+    await u.click(within(again).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("POST", "/investments/trades")!.body).toMatchObject({ type: "contribution", amountMinor: 80_000, quantity: 0.004 }));
+
+    await u.selectOptions(screen.getByLabelText("Recorded by"), "units");
+    await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ tracking: "units" }));
+  });
 });

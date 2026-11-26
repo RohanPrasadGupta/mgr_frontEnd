@@ -4284,6 +4284,8 @@ export interface operations {
                     /** @enum {string} */
                     costMethod?: "wavg" | "fifo" | "manual";
                     archived?: boolean;
+                    /** @enum {string} */
+                    tracking?: "units" | "value";
                     currency?: string;
                 };
             };
@@ -4515,7 +4517,7 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     type?: "buy" | "sell" | "dividend" | "bonus" | "fee" | "contribution" | "withdrawal";
-                    quantity?: number;
+                    quantity?: number | null;
                     priceMinor?: number;
                     amountMinor?: number;
                     feeMinor?: number;

@@ -59,8 +59,8 @@ export function lastMonths(today: string, n = 12): string[] {
   return Array.from({ length: n }, (_, i) => { const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; });
 }
 
-interface AssetInfo { cls: AssetClass; currency: string; symbol: string; name: string }
-export const assetIndex = (holdings: Holding[]) => new Map<string, AssetInfo>(holdings.map((h) => [h.asset.id, { cls: h.asset.class, currency: h.asset.currency, symbol: h.asset.symbol, name: h.asset.name }]));
+interface AssetInfo { cls: AssetClass; currency: string; symbol: string; name: string; tracking: "units" | "value" }
+export const assetIndex = (holdings: Holding[]) => new Map<string, AssetInfo>(holdings.map((h) => [h.asset.id, { cls: h.asset.class, currency: h.asset.currency, symbol: h.asset.symbol, name: h.asset.name, tracking: h.asset.tracking }]));
 
 /** Net capital added per month and class, in one currency (other currencies are left out, never converted). */
 export function monthlyCapital(trades: Trade[], assets: Map<string, AssetInfo>, currency: string, months: string[]): Partial<Record<AssetClass, number[]>> {

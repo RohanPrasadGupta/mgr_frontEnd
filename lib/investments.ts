@@ -17,5 +17,17 @@ export const TYPES_FOR: Record<"units" | "value", { value: TradeType; label: str
   value: [{ value: "contribution", label: "Contribution" }, { value: "withdrawal", label: "Withdrawal" }, { value: "dividend", label: "Dividend / interest" }, { value: "fee", label: "Fee" }],
 };
 export const TYPE_LABEL: Record<TradeType, string> = { buy: "Buy", sell: "Sell", bonus: "Bonus", dividend: "Dividend", fee: "Fee", contribution: "Contribution", withdrawal: "Withdrawal" };
+/** Things you buy and sell. Recorded by amount only (tracking "value"), their entries still read Buy / Sell. */
+const TRADED: AssetClass[] = ["stock", "crypto", "gold"];
+/** Types where the add-asset form asks how entries are recorded; the first option is the default. */
+export const RECORD_CHOICE: Partial<Record<AssetClass, ("value" | "units")[]>> = { crypto: ["value", "units"] };
+type AssetLike = { class: AssetClass; tracking: "units" | "value" };
+export const amountOnlyTrade = (a: AssetLike) => a.tracking === "value" && TRADED.includes(a.class);
+/** The entry types offered for an asset, labelled the way that asset talks (a crypto "contribution" is a Buy). */
+export function typesFor(a: AssetLike): { value: TradeType; label: string }[] {
+  if (!amountOnlyTrade(a)) return TYPES_FOR[a.tracking];
+  return [{ value: "contribution", label: "Buy" }, { value: "withdrawal", label: "Sell" }, { value: "dividend", label: "Dividend" }, { value: "fee", label: "Fee" }];
+}
+export const entryLabel = (type: TradeType, a: AssetLike) => (amountOnlyTrade(a) && type === "contribution" ? "Buy" : amountOnlyTrade(a) && type === "withdrawal" ? "Sell" : TYPE_LABEL[type]);
 /** Money flowing back to the investor is shown positive. */
 export const isInflow = (t: TradeType) => t === "sell" || t === "dividend" || t === "withdrawal";

@@ -3427,6 +3427,13 @@
                   "archived": {
                     "type": "boolean"
                   },
+                  "tracking": {
+                    "type": "string",
+                    "enum": [
+                      "units",
+                      "value"
+                    ]
+                  },
                   "currency": {
                     "type": "string",
                     "minLength": 3,
@@ -3868,9 +3875,16 @@
                     ]
                   },
                   "quantity": {
-                    "type": "number",
-                    "exclusiveMinimum": 0,
-                    "maximum": 1000000000000
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "priceMinor": {
                     "type": "number",

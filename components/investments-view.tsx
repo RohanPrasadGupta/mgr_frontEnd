@@ -1,10 +1,13 @@
 "use client";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useSyncExternalStore } from "react";
+import { toast } from "@/lib/toast";
+import { useConfirm } from "./feedback";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, qk, useAllTrades, useMe, useMutate, usePortfolio } from "@/lib/api/hooks";
 import type { AssetClass, Body, CostMethod, Holding, Trade } from "@/lib/api/types";
-import { CLASS_BORDER, CLASS_DOT, CLASS_FILL, CLASS_LABEL, CLASS_STROKE, CLASS_TEXT, CLASS_VAR, TYPE_LABEL, defaultTracking, isInflow } from "@/lib/investments";
+import { CLASS_BORDER, CLASS_DOT, CLASS_FILL, CLASS_LABEL, CLASS_STROKE, CLASS_TEXT, CLASS_VAR, RECORD_CHOICE, amountOnlyTrade, defaultTracking, entryLabel, isInflow } from "@/lib/investments";
 import { assetIndex, classesOf, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital, type ClassTotals, type PerCurrency } from "@/lib/invest-board";
 import { compact, toSlices } from "@/lib/chart-utils";
 import { DonutChart, GroupedBarChart, LineChart, NoData } from "./charts";
@@ -184,7 +187,7 @@ function ActivityList({ trades, assets }: { trades: Trade[]; assets: ReturnType<
             <Link href={`/investments/${t.assetId}`} className="flex items-center gap-3 px-1 py-2.5 hover:bg-border/30">
               <span className={cx("grid size-8 shrink-0 place-items-center rounded-full text-sm text-white", CLASS_DOT[a.cls])} aria-hidden>{inflow ? "↘" : "↗"}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{CLASS_LABEL[a.cls]} · {a.symbol} <span className="font-normal text-muted">· {TYPE_LABEL[t.type]}{t.quantity !== null ? ` ${formatQty(t.quantity)}` : ""}</span></span>
+                <span className="block truncate text-sm font-medium">{CLASS_LABEL[a.cls]} · {a.symbol} <span className="font-normal text-muted">· {entryLabel(t.type, { class: a.cls, tracking: a.tracking })}{t.quantity !== null ? ` ${formatQty(t.quantity)}` : ""}</span></span>
                 <span className="block text-xs text-muted">{fmtDay(t.tradedOn)}</span>
               </span>
               <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : inflow ? "text-income" : CLASS_TEXT[a.cls])}>{t.type === "bonus" ? "free" : `${inflow ? "+" : ""}${formatMoney(t.amountMinor, a.currency)}`}</span>
@@ -200,6 +203,7 @@ function ClassTab({ cls, p, trades }: { cls: AssetClass; p: Portfolio; trades?: 
   const holdings = p.holdings.filter((h) => h.asset.class === cls).sort((x, y) => Number(x.closed) - Number(y.closed));
   const t = totalsByClass(holdings)[0]!;
   const units = holdings.some((h) => h.asset.tracking === "units");
+  const traded = units || holdings.some((h) => amountOnlyTrade(h.asset));
   const assets = assetIndex(p.holdings);
   const curs = trades ? currenciesOf(trades, assets, cls) : [];
   const [cur, setCur] = useState<string | null>(null);
@@ -210,7 +214,7 @@ function ClassTab({ cls, p, trades }: { cls: AssetClass; p: Portfolio; trades?: 
     <>
       <section aria-label={`${CLASS_LABEL[cls]} summary`} className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-3">
         <Stat label="Capital at stake" value={showPer(t.capital)} cls={CLASS_TEXT[cls]} sub={units ? "cost of what you still hold" : "contributions minus withdrawals"} />
-        <Stat label={units ? "Total bought" : "Total contributed"} value={showPer(t.putIn)} sub="everything ever put in" />
+        <Stat label={traded ? "Total bought" : "Total contributed"} value={showPer(t.putIn)} sub="everything ever put in" />
         {units ? <Stat label="Realised P/L" value={showPer(t.realised, true)} sub="on units sold" /> : <Stat label="Current value" value={showPer(t.value)} sub="your latest value, else at cost" />}
         <Stat label="Entries" value={String(t.entries)} sub={`${t.open} of ${t.holdings} ${t.holdings === 1 ? "holding" : "holdings"} open`} />
       </section>
@@ -221,7 +225,7 @@ function ClassTab({ cls, p, trades }: { cls: AssetClass; p: Portfolio; trades?: 
           <h2 className="text-sm font-semibold">Capital added per year{chartCur && <span className="font-normal text-muted"> ({chartCur})</span>}</h2>
           <CurrencyChips list={curs} value={chartCur ?? ""} onChange={setCur} />
         </div>
-        {!yearly ? <Skeleton className="h-52" /> : yearly.years.length === 0 ? <NoData>No entries yet.</NoData> : (
+        {!trades ? <Skeleton className="h-52" /> : !yearly || yearly.years.length === 0 ? <NoData>No entries yet.</NoData> : (
           <GroupedBarChart labels={yearly.years} ariaLabel={`${CLASS_LABEL[cls]} capital added per year in ${chartCur}`} format={(v) => formatMoney(v, chartCur!, { sign: true })} axis={(v) => compact(toMajor(v, chartCur!))}
             series={[{ name: "Capital added", values: yearly.values.map((v) => Math.max(0, v)), className: CLASS_FILL[cls] }]} />
         )}
@@ -235,7 +239,44 @@ function ClassTab({ cls, p, trades }: { cls: AssetClass; p: Portfolio; trades?: 
         <h2 className="mb-2 text-sm font-semibold">Latest {CLASS_LABEL[cls].toLowerCase()} entries</h2>
         {!trades ? <ListSkeleton rows={4} /> : <ActivityList trades={recent(trades, 12, cls, assets)} assets={assets} />}
       </Card>
+
+      <RemoveType cls={cls} holdings={holdings} />
     </>
+  );
+}
+
+/**
+ * Removes a whole investment type, which means deleting its assets — allowed only while nothing is recorded under
+ * it (the API refuses to delete an asset that has entries, so this is enforced there too, not just here).
+ */
+function RemoveType({ cls, holdings }: { cls: AssetClass; holdings: Holding[] }) {
+  const confirm = useConfirm();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const entries = holdings.reduce((n, h) => n + h.tradeCount, 0);
+  const label = CLASS_LABEL[cls];
+  async function remove() {
+    const names = holdings.map((h) => h.asset.symbol).join(", ");
+    if (!(await confirm({ title: `Remove ${label}?`, confirmLabel: `Remove ${label}`, destructive: true, message: `This deletes ${holdings.length === 1 ? "its asset" : `its ${holdings.length} assets`} (${names}). Nothing is recorded under ${label}, so no entries are lost.` }))) return;
+    setBusy(true); setError(null);
+    try {
+      for (const h of holdings) await call(client.DELETE("/investments/assets/{id}", { params: { path: { id: h.asset.id } } }));
+      toast.success(`${label} removed`);
+    } catch (e) { setError(e); } finally {
+      setBusy(false);
+      await invalidateInvestments(qc); // the tab disappears once its assets are gone
+    }
+  }
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0 text-sm">
+        <div className="font-medium">Remove {label}</div>
+        <div className="text-muted">{entries === 0 ? `Nothing is recorded under ${label}, so it can be removed.` : `Only possible while nothing is recorded under ${label} — delete its ${entries} ${entries === 1 ? "entry" : "entries"} first, or archive the assets instead.`}</div>
+        {error !== null && <div className="mt-2"><ErrorNote error={error} /></div>}
+      </div>
+      <Button variant="danger" onClick={remove} loading={busy} disabled={entries > 0}>Remove {label}</Button>
+    </Card>
   );
 }
 
@@ -277,6 +318,11 @@ function HoldingRow({ h }: { h: Holding }) {
     h.marketValueMinor !== null && !h.closed
       ? { label: "Unrealised", value: m(h.unrealisedPnlMinor ?? 0, { sign: true }), note: `value ${m(h.marketValueMinor)}`, cls: tone(h.unrealisedPnlMinor) }
       : { label: "Realised P/L", value: sold ? m(h.realisedPnlMinor, { sign: true }) : "—", note: sold ? "on sold units" : "no sells yet", cls: tone(h.realisedPnlMinor) },
+  ] : amountOnlyTrade(a) ? [
+    { label: "Total bought", value: m(h.contributedMinor), note: "all buys ever", cls: "text-income" },
+    ...(h.withdrawnMinor > 0 ? [{ label: "Sold", value: m(h.withdrawnMinor), note: "received", cls: "text-expense" }] : []),
+    { label: "Remaining", value: m(h.remainingCostMinor), note: "capital at stake (buys + fees − sells)", cls: "text-primary" },
+    { label: "Current value", value: h.marketValueMinor === null ? "—" : m(h.marketValueMinor), note: h.marketValueMinor === null ? "no value set" : `${formatPct(h.returnPct, true)} return`, cls: tone(h.unrealisedPnlMinor) },
   ] : [
     { label: "Contributed", value: m(h.contributedMinor), note: "paid in", cls: "text-income" },
     ...(h.withdrawnMinor > 0 ? [{ label: "Withdrawn", value: m(h.withdrawnMinor), note: "taken out", cls: "text-expense" }] : []),
@@ -295,7 +341,7 @@ function HoldingRow({ h }: { h: Holding }) {
             </div>
             <div className="truncate text-sm text-primary">{a.name}</div>
             <div className="text-xs text-muted">
-              {h.tradeCount} {h.tradeCount === 1 ? "entry" : "entries"}{units && <> · {h.closed ? "0 units (closed)" : `${formatQty(h.quantity)} units`}</>}
+              {h.tradeCount} {h.tradeCount === 1 ? "entry" : "entries"}{units && <> · {h.closed ? "0 units (closed)" : `${formatQty(h.quantity)} units`}</>}{!units && h.quantity > 0 && <> · {formatQty(h.quantity)} units noted</>}
             </div>
             {(h.lastBuyPriceMinor !== null || h.lastSellPriceMinor !== null) && (
               <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] tabular-nums">
@@ -317,16 +363,19 @@ const CLASSES = Object.keys(CLASS_LABEL) as AssetClass[];
 export function AssetDialog({ open, onClose, initialClass = "stock" }: { open: boolean; onClose: () => void; initialClass?: AssetClass }) {
   const { data: me } = useMe();
   const [cls, setCls] = useState<AssetClass>(initialClass);
+  const choice = RECORD_CHOICE[cls];
+  const [mode, setMode] = useState<"units" | "value" | null>(null);
+  const tracking = choice ? (mode && choice.includes(mode) ? mode : choice[0]!) : defaultTracking(cls);
   const [error, setError] = useState<string | null>(null);
   const create = useMutate((body: Body<"/investments/assets", "post">) => call(client.POST("/investments/assets", { body })), async (qc) => { await invalidateInvestments(qc); await qc.invalidateQueries({ queryKey: qk.me }); }, "Asset added");
-  const units = defaultTracking(cls) === "units";
+  const units = tracking === "units";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const f = new FormData(e.currentTarget);
     try {
-      await create.mutateAsync({ symbol: String(f.get("symbol")).trim(), name: String(f.get("name")).trim(), class: cls, currency: String(f.get("currency")), costMethod: (String(f.get("costMethod") || "wavg") as CostMethod) });
+      await create.mutateAsync({ symbol: String(f.get("symbol")).trim(), name: String(f.get("name")).trim(), class: cls, currency: String(f.get("currency")), tracking, costMethod: (String(f.get("costMethod") || "wavg") as CostMethod) });
       onClose();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
@@ -340,11 +389,24 @@ export function AssetDialog({ open, onClose, initialClass = "stock" }: { open: b
             <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}><CurrencyOptions current={me?.baseCurrency} /></Select></Field>
           </div>
           <Field label="Name"><Input name="name" required maxLength={100} placeholder={units ? "e.g. Acme Corporation" : "e.g. Example Growth Fund"} /></Field>
+          {choice && (
+            <fieldset>
+              <legend className="mb-1.5 text-xs font-medium text-muted">How do you record it?</legend>
+              <div role="radiogroup" aria-label="How do you record it?" className="grid gap-2 sm:grid-cols-2">
+                {choice.map((m) => (
+                  <label key={m} className={cx("flex cursor-pointer gap-2 rounded-lg border p-2.5 text-sm", tracking === m ? "border-primary bg-primary/10" : "border-border")}>
+                    <input type="radio" name="tracking" value={m} checked={tracking === m} onChange={() => setMode(m)} className="mt-0.5 accent-[var(--primary)]" />
+                    <span>{m === "value" ? <><b>Amount only</b><span className="block text-xs text-muted">Each buy or sell is an amount plus fee; the quantity is optional.</span></> : <><b>Units and price</b><span className="block text-xs text-muted">Each buy or sell is a quantity × price per unit.</span></>}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           {units ? (
             <Field label="Cost method" hint="Weighted average is the default. “Selected buys” uses only buys you flag for the displayed average (your v1 “Use for avg”).">
               <Select name="costMethod" defaultValue="wavg"><option value="wavg">Weighted average</option><option value="fifo">FIFO</option><option value="manual">Selected buys (manual)</option></Select>
             </Field>
-          ) : <p className="text-xs text-muted">Tracked by value: you record contributions and withdrawals, and update the current total value yourself.</p>}
+          ) : <p className="text-xs text-muted">{choice ? "You record what you paid and received; set the current total value yourself when you want to see a gain or loss." : "Tracked by value: you record contributions and withdrawals, and update the current total value yourself."}</p>}
           {error && <ErrorNote error={new Error(error)} />}
           <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={create.isPending}>Add</Button></div>
         </form>

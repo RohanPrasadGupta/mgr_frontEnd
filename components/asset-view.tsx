@@ -6,7 +6,7 @@ import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, useAssetPrices, useAssetTrades, useHolding, useMutate } from "@/lib/api/hooks";
 import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/types";
-import { CLASS_LABEL, TYPES_FOR, TYPE_LABEL, isInflow } from "@/lib/investments";
+import { CLASS_LABEL, amountOnlyTrade, defaultTracking, entryLabel, isInflow, typesFor } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
@@ -36,7 +36,7 @@ export function AssetView() {
     await act(() => patch.mutateAsync({ currency: next }));
   }
   async function deleteTrade(t: Trade) {
-    if (!(await confirm({ message: `Delete this ${TYPE_LABEL[t.type].toLowerCase()} from ${fmtDate(t.tradedOn)}?`, destructive: true }))) return;
+    if (!(await confirm({ message: `Delete this ${entryLabel(t.type, a).toLowerCase()} from ${fmtDate(t.tradedOn)}?`, destructive: true }))) return;
     setDeleting(t.id);
     try { await act(() => removeTrade.mutateAsync(t.id)); } finally { setDeleting(null); }
   }
@@ -58,7 +58,7 @@ export function AssetView() {
           <h1 className="text-2xl font-semibold">{a.symbol}</h1>
           <p className="text-sm text-muted">{a.name} · {CLASS_LABEL[a.class]} · {cur}{a.archived && " · archived"}</p>
         </div>
-        <Button onClick={() => setDialog({})} disabled={a.archived}>+ Add {units ? "trade" : "entry"}</Button>
+        <Button onClick={() => setDialog({})} disabled={a.archived}>+ Add {units || amountOnlyTrade(a) ? "trade" : "entry"}</Button>
       </div>
 
       <section aria-label="Position" className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -72,9 +72,9 @@ export function AssetView() {
           <Stat label="Return" value={formatPct(h.returnPct, true)} cls={tone(h.returnPct)} sub={`XIRR ${formatPct(h.xirrPct, true)}`} />
           <Stat label="Dividends / fees" value={formatMoney(h.dividendsMinor, cur)} sub={`fees ${formatMoney(h.feesMinor, cur)}`} />
         </>) : (<>
-          <Stat label="Contributed" value={formatMoney(h.contributedMinor, cur)} />
-          <Stat label="Withdrawn" value={formatMoney(h.withdrawnMinor, cur)} />
-          <Stat label="Net invested" value={formatMoney(h.remainingCostMinor, cur)} />
+          <Stat label={amountOnlyTrade(a) ? "Total bought" : "Contributed"} value={formatMoney(h.contributedMinor, cur)} sub={amountOnlyTrade(a) && h.quantity > 0 ? `${formatQty(h.quantity)} units noted` : undefined} />
+          <Stat label={amountOnlyTrade(a) ? "Sold" : "Withdrawn"} value={formatMoney(h.withdrawnMinor, cur)} />
+          <Stat label={amountOnlyTrade(a) ? "Remaining (capital at stake)" : "Net invested"} value={formatMoney(h.remainingCostMinor, cur)} />
           <Stat label="Current value" value={h.marketValueMinor === null ? "Set a value" : formatMoney(h.marketValueMinor, cur)} />
           <Stat label="Gain / loss" value={h.unrealisedPnlMinor === null ? "—" : formatMoney(h.unrealisedPnlMinor, cur, { sign: true })} cls={tone(h.unrealisedPnlMinor)} />
           <Stat label="Return" value={formatPct(h.returnPct, true)} cls={tone(h.returnPct)} sub={`XIRR ${formatPct(h.xirrPct, true)}`} />
@@ -87,21 +87,21 @@ export function AssetView() {
       <PriceCard h={h} />
 
       <Card>
-        <h2 className="mb-2 text-sm font-semibold">{units ? "Trades" : "Contributions & withdrawals"}</h2>
+        <h2 className="mb-2 text-sm font-semibold">{units || amountOnlyTrade(a) ? "Trades" : "Contributions & withdrawals"}</h2>
         {trades.isPending ? <ListSkeleton rows={3} /> : trades.error ? <ErrorNote error={trades.error} /> : trades.data.length === 0 ? <Empty>Nothing recorded yet.</Empty> : (
           <ul className="divide-y divide-border">
             {trades.data.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2.5">
                 <span className="w-20 shrink-0 text-xs text-muted">{fmtDate(t.tradedOn)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{TYPE_LABEL[t.type]}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
+                  <span className="block text-sm font-medium">{entryLabel(t.type, a)}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
                   <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, t.type === "buy" && !t.includeInAvg ? "not in average" : null].filter(Boolean).join(" · ")}</span>
                 </span>
                 <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : isInflow(t.type) ? "text-income" : "")}>{t.type === "bonus" ? "free" : `${isInflow(t.type) ? "+" : "−"}${formatMoney(t.amountMinor, cur)}`}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-1">
                   {t.type === "buy" && <Switch checked={t.includeInAvg} disabled={a.archived || toggleAvg.isPending} label={`Use the buy of ${fmtDate(t.tradedOn)} for the average price`} onChange={(on) => act(() => toggleAvg.mutateAsync({ tradeId: t.id, on }))} />}
-                  <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDialog({ trade: t })} disabled={a.archived} aria-label={`Edit ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Edit</Button>
-                  <Button variant="ghost" className="px-2.5 py-1 text-xs text-expense" onClick={() => deleteTrade(t)} loading={deleting === t.id} disabled={a.archived || (deleting !== null && deleting !== t.id)} aria-label={`Delete ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Delete</Button>
+                  <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDialog({ trade: t })} disabled={a.archived} aria-label={`Edit ${entryLabel(t.type, a).toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Edit</Button>
+                  <Button variant="ghost" className="px-2.5 py-1 text-xs text-expense" onClick={() => deleteTrade(t)} loading={deleting === t.id} disabled={a.archived || (deleting !== null && deleting !== t.id)} aria-label={`Delete ${entryLabel(t.type, a).toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Delete</Button>
                 </span>
               </li>
             ))}
@@ -115,6 +115,14 @@ export function AssetView() {
             <span className="text-muted">Cost method</span>
             <Select value={a.costMethod} onChange={(e) => act(() => patch.mutateAsync({ costMethod: e.target.value as CostMethod }))} className="w-auto">
               <option value="wavg">Weighted average</option><option value="fifo">FIFO</option><option value="manual">Selected buys</option>
+            </Select>
+          </label>
+        )}
+        {trades.data?.length === 0 && (a.class === "crypto" || a.tracking !== defaultTracking(a.class)) && (
+          <label className="flex items-center gap-2">
+            <span className="text-muted">Recorded by</span>
+            <Select value={a.tracking} onChange={(e) => act(() => patch.mutateAsync({ tracking: e.target.value as "units" | "value" }))} className="w-auto" title="Can be changed until the first entry is recorded">
+              <option value="value">Amount only</option><option value="units">Units and price</option>
             </Select>
           </label>
         )}
@@ -179,7 +187,8 @@ function PriceCard({ h }: { h: Holding }) {
 function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding: Holding; trade?: Trade; onClose: () => void }) {
   const a = holding.asset;
   const units = a.tracking === "units";
-  const options = TYPES_FOR[a.tracking];
+  const options = typesFor(a);
+  const amountOnly = amountOnlyTrade(a);
   const [type, setType] = useState<TradeType>(options[0]!.value);
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
@@ -203,6 +212,9 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
 
   const qtyType = type === "buy" || type === "sell" || type === "bonus";
   const priced = type === "buy" || type === "sell";
+  // amount-only buys/sells (crypto by amount): the quantity is optional and only noted
+  const optionalQty = amountOnly && (type === "contribution" || type === "withdrawal");
+  const implied = optionalQty && Number(qty) > 0 && Number(amount) > 0 ? (Number(amount) * unit) / Number(qty) : null;
   const total = priced && Number(qty) > 0 && Number(price) > 0 ? Math.round(Number(qty) * Number(price) * unit) : null;
 
   const save = useMutate(async () => {
@@ -210,11 +222,15 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
     if (qtyType) { if (!(Number(qty) > 0)) throw new Error("Enter a quantity greater than 0"); body.quantity = Number(qty); }
     if (priced) { if (!(Number(price) > 0)) throw new Error("Enter a price greater than 0"); body.priceMinor = Number((Number(price) * unit).toFixed(6)); }
     if (!qtyType) { if (!(Number(amount) > 0)) throw new Error("Enter an amount greater than 0"); body.amountMinor = toMinor(Number(amount), a.currency); }
+    if (optionalQty) {
+      if (qty && !(Number(qty) > 0)) throw new Error("Leave the quantity empty or enter a number greater than 0");
+      if (qty) body.quantity = Number(qty); else if (trade?.quantity != null) body.quantity = null; // cleared
+    }
     if (type === "buy") body.includeInAvg = inAvg;
     if (trade && type !== trade.type) body.type = type;
     return trade
       ? call(client.PATCH("/investments/trades/{id}", { params: { path: { id: trade.id } }, body }))
-      : call(client.POST("/investments/trades", { body: { ...body, note: note || undefined, assetId: a.id, type, clientId: crypto.randomUUID() } }));
+      : call(client.POST("/investments/trades", { body: { ...body, quantity: body.quantity ?? undefined, note: note || undefined, assetId: a.id, type, clientId: crypto.randomUUID() } }));
   }, invalidateInvestments, trade ? "Entry updated" : "Entry added");
 
   async function submit(e: React.FormEvent) { e.preventDefault(); setError(null); try { await save.mutateAsync(undefined as never); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); } }
@@ -226,7 +242,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={trade ? "Edit entry" : units ? "Add trade" : "Add entry"}>
+    <Modal open={open} onClose={onClose} title={trade ? "Edit entry" : units || amountOnly ? "Add trade" : "Add entry"}>
       <form onSubmit={submit} className="space-y-3">
         <fieldset>
           <legend className="mb-1.5 text-xs font-medium text-muted">Type</legend>
@@ -242,6 +258,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
         {qtyType && <Field label="Quantity"><Input type="number" step="any" min="0" required value={qty} onChange={(e) => setQty(e.target.value)} autoFocus /></Field>}
         {priced && <Field label={`Price per unit (${a.currency})`} hint={total === null ? undefined : `Total ${formatMoney(total, a.currency)}`}><Input type="number" step="any" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} /></Field>}
         {!qtyType && <Field label={`Amount (${a.currency})`}><Input type="number" step="0.01" min="0" required value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus /></Field>}
+        {optionalQty && <Field label="Quantity" hint={implied !== null ? `≈ ${formatUnitPrice(implied, a.currency)} per unit` : "Optional — add it if you want units and price per unit tracked"}><Input type="number" step="any" min="0" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Optional" /></Field>}
         {type !== "bonus" && type !== "fee" && <Field label={`Fee / charge (${a.currency})`} hint="Optional"><Input type="number" step="0.01" min="0" value={fee} onChange={(e) => setFee(e.target.value)} /></Field>}
         <Field label="Date"><Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Note"><Input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>

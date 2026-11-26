@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { baseRoutes } from "@/test/fixtures";
@@ -56,5 +56,44 @@ describe("investments list", () => {
     expect(screen.getByRole("button", { name: "+ Add stock" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Overview" }));
     expect(window.location.search).toBe("");
+  });
+
+  it("a type with nothing recorded can be removed (its empty assets are deleted); one with entries can't", async () => {
+    const empty = holding(asset("o1", "SSF", { class: "other", tracking: "value" }), { tradeCount: 0, quantity: 0, remainingCostMinor: 0, totalBoughtMinor: 0 });
+    const m = mockFetch({
+      ...baseRoutes,
+      "GET /investments/portfolio": { data: { ...portfolio, holdings: [...portfolio.holdings, empty] } },
+      "GET /investments/portfolio/history": { data: { baseCurrency: "THB", points: [] } },
+      "GET /investments/trades": { data: [] },
+      "DELETE /investments/assets/o1": null,
+    });
+    renderWithClient(<InvestmentsView />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole("tab", { name: "Stock" }));
+    expect(screen.getByRole("button", { name: "Remove Stock" })).toBeDisabled();
+    expect(screen.getByText(/delete its 4 entries first/)).toBeInTheDocument();
+
+    await u.click(screen.getByRole("tab", { name: "Other" }));
+    expect(screen.getByText("No entries yet.")).toBeInTheDocument(); // the chart doesn't load forever
+    await u.click(screen.getByRole("button", { name: "Remove Other" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/SSF/);
+    await u.click(within(dialog).getByRole("button", { name: "Remove Other" }));
+    await waitFor(() => expect(m.calls.some((c) => c.method === "DELETE" && c.path === "/investments/assets/o1")).toBe(true));
+  });
+
+  it("adding a crypto asks how it's recorded (amount only by default)", async () => {
+    const m = mockFetch({ ...baseRoutes, "GET /investments/portfolio": { data: { ...portfolio, holdings: [] } }, "GET /investments/trades": { data: [] }, "POST /investments/assets": { data: asset("c1", "BTC", { class: "crypto", tracking: "value" }) } });
+    renderWithClient(<InvestmentsView />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole("button", { name: "+ Add asset" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("radiogroup", { name: "How do you record it?" })).toBeNull(); // stocks: units and price
+    await u.selectOptions(within(dialog).getByLabelText("Type"), "crypto");
+    expect(within(dialog).getByRole("radio", { name: /Amount only/ })).toBeChecked();
+    await u.type(within(dialog).getByLabelText("Symbol / short name"), "btc");
+    await u.type(within(dialog).getByLabelText("Name"), "Bitcoin");
+    await u.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(m.last("POST", "/investments/assets")!.body).toMatchObject({ class: "crypto", tracking: "value", symbol: "btc" }));
   });
 });
