@@ -2,23 +2,144 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { call, client } from "@/lib/api/client";
-import { invalidateInvestments, invalidateLedger, qk, useAccounts, useCategories, useMe } from "@/lib/api/hooks";
+import { invalidateInvestments, invalidateLedger, invalidateNotes, qk, useAccounts, useCategories, useCurrencies, useMe } from "@/lib/api/hooks";
 import type { ImportReport, InvestmentImportReport, Transaction } from "@/lib/api/types";
 import { REQUIRED, buildRows, csvCell, detectColumns, parseJsonDocs, type Field, type ImportRow } from "@/lib/import";
 import { toMajor } from "@/lib/money";
+import { INVESTMENT_SHEETS, chunks, currencyCheck, readRestoreWorkbook, type Restore } from "@/lib/restore";
 import { Button, Card, ErrorNote, Field as FormField, Input, Segmented, Select, cx } from "./ui";
 
-type Tab = "transactions" | "investments" | "export";
+type Tab = "restore" | "transactions" | "investments" | "export";
 
 export function ImportExportView() {
   const [tab, setTab] = useState<Tab>("transactions");
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Import & export</h1>
-      <Segmented value={tab} onChange={setTab} options={[{ value: "transactions", label: "Import transactions" }, { value: "investments", label: "Import investments" }, { value: "export", label: "Export CSV" }]} />
+      <Segmented value={tab} onChange={setTab} options={[{ value: "transactions", label: "Import transactions" }, { value: "investments", label: "Import investments" }, { value: "restore", label: "Restore from old app" }, { value: "export", label: "Export CSV" }]} />
+      {tab === "restore" && <RestoreFromOldApp />}
       {tab === "transactions" && <ImportTransactions />}
       {tab === "investments" && <ImportInvestments />}
       {tab === "export" && <ExportCsv />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+/** One part of the restore (a sheet of the old app's Excel backup), with the API's report(s) added up. */
+interface PartResult { label: string; total: number; imported: number; duplicates: number; invalid: { row: number; reason: string }[]; problems: string[] }
+
+function RestoreFromOldApp() {
+  const { data: me } = useMe();
+  const { data: currencies } = useCurrencies();
+  const qc = useQueryClient();
+  const [fileName, setFileName] = useState("");
+  const [data, setData] = useState<Restore | null>(null);
+  const [results, setResults] = useState<PartResult[] | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState<"parse" | "check" | "import" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const parts = data ? [
+    { label: "Categories", count: data.categories.length },
+    { label: "Currencies", count: data.currencies.length },
+    { label: "Transactions", count: data.transactions.length },
+    { label: "Notes", count: data.notes.length },
+    ...INVESTMENT_SHEETS.map((s) => ({ label: s.label, count: data.investments[s.source].length })),
+  ] : [];
+
+  async function onFile(file: File | undefined) {
+    setError(null); setResults(null); setChecked(false); setDone(false); setData(null);
+    if (!file) return;
+    setFileName(file.name);
+    if (file.size > 15 * 1024 * 1024) { setError("That file is larger than 15 MB, which is bigger than any backup from the old app."); return; }
+    setBusy("parse");
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array", bookVBA: false, cellHTML: false });
+      setData(readRestoreWorkbook(XLSX as never, wb, me?.baseCurrency ?? "THB"));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not read the file"); }
+    finally { setBusy(null); }
+  }
+
+  const ccy = data && currencies && me ? currencyCheck(data, currencies.map((c) => c.code), me.baseCurrency) : null;
+
+  /** Every non-empty part, in order: categories (first, so they keep their icons), transactions, notes, then each investment sheet (each split into ≤10,000-row requests). */
+  async function run(dryRun: boolean) {
+    if (!data) return;
+    setError(null); setBusy(dryRun ? "check" : "import");
+    const out: PartResult[] = [];
+    const add = (label: string, offset: number, r: { total: number; imported: number; duplicates: number; invalid: { row: number; reason: string }[] }, problems: string[] = []) => {
+      const prev = out.find((p) => p.label === label);
+      const invalid = r.invalid.map((i) => ({ row: i.row + offset, reason: i.reason }));
+      if (prev) Object.assign(prev, { total: prev.total + r.total, imported: prev.imported + r.imported, duplicates: prev.duplicates + r.duplicates, invalid: [...prev.invalid, ...invalid], problems: [...prev.problems, ...problems] });
+      else out.push({ label, total: r.total, imported: r.imported, duplicates: r.duplicates, invalid, problems });
+    };
+    try {
+      let offset = 0;
+      for (const rows of chunks(data.categories)) { add("Categories", offset, (await call(client.POST("/imports/categories", { body: { rows, dryRun } }))).data); offset += rows.length; }
+      offset = 0;
+      for (const rows of chunks(data.transactions)) { add("Transactions", offset, (await call(client.POST("/imports/transactions", { body: { rows, dryRun } }))).data); offset += rows.length; }
+      offset = 0;
+      for (const rows of chunks(data.notes)) { add("Notes", offset, (await call(client.POST("/imports/notes", { body: { rows, dryRun } }))).data); offset += rows.length; }
+      for (const s of INVESTMENT_SHEETS) {
+        offset = 0;
+        for (const rows of chunks(data.investments[s.source])) {
+          const r = (await call(client.POST("/imports/investments", { body: { source: s.source, rows, dryRun } }))).data;
+          add(s.label, offset, r, r.positionErrors.map((p) => `${p.symbol}: ${p.message}`)); offset += rows.length;
+        }
+      }
+      setResults(out); setChecked(dryRun); setDone(!dryRun);
+      if (!dryRun) { await invalidateLedger(qc); await qc.invalidateQueries({ queryKey: qk.categories }); await invalidateNotes(qc); await invalidateInvestments(qc); }
+    } catch (e) {
+      setResults(out.length ? out : null);
+      setError(`${e instanceof Error ? e.message : "Import failed"}${!dryRun && out.length ? " — the parts listed below were already saved; run the import again to finish (nothing is duplicated)." : ""}`);
+    } finally { setBusy(null); }
+  }
+
+  const empty = parts.every((p) => p.label === "Currencies" || p.count === 0);
+  return (
+    <div className="space-y-4">
+      <Card className="space-y-3">
+        <p className="text-sm text-muted">In the old MoneyMgr, open <b>Export Data</b> and click <b>Download Excel backup</b>. Choose that <code>.xlsx</code> file here: its categories, transactions, notes, stock trades and investment records are brought in together (currencies are checked). Press <b>Check</b> first — nothing is saved until you press Import, and importing the same file again never creates duplicates.</p>
+        <Input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choose the backup file" onChange={(e) => onFile(e.target.files?.[0])} />
+        {busy === "parse" && <p className="text-sm text-muted">Reading the file…</p>}
+        {error && <ErrorNote error={new Error(error)} />}
+        {data && (
+          <div className="space-y-3">
+            <p className="text-sm">{fileName}</p>
+            <ul className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">{parts.map((p) => <li key={p.label} className="rounded-lg border border-border px-3 py-2"><span className="block text-xs text-muted">{p.label}</span><span className="font-semibold tabular-nums">{p.count.toLocaleString()}</span></li>)}</ul>
+            {ccy && ccy.unknown.length > 0 && <p className="text-sm text-expense">MoneyMgr doesn&apos;t support {ccy.unknown.join(", ")} — rows in {ccy.unknown.length === 1 ? "that currency" : "those currencies"} will be skipped.</p>}
+            {ccy?.oldDefault && <p className="text-sm text-muted">Your old app&apos;s default currency was {ccy.oldDefault}; here it is {me?.baseCurrency}. Totals are shown in {me?.baseCurrency} — change it in Settings if you prefer {ccy.oldDefault}.</p>}
+            {data.currencies.length > 0 && !ccy?.unknown.length && <p className="text-sm text-muted">Currencies ({data.currencies.map((c) => c.code).join(", ")}) are all supported — nothing to import for them.</p>}
+            {empty ? <p className="text-sm text-muted">The backup is empty.</p> : (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => run(true)} disabled={busy !== null}>{busy === "check" ? "Checking…" : "Check (nothing is saved)"}</Button>
+                <Button onClick={() => run(false)} disabled={busy !== null || !checked}>{busy === "import" ? "Importing…" : "Import everything"}</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+      {results && (
+        <Card className="space-y-3" role="status">
+          <h2 className="text-sm font-semibold">{checked ? "Check result — nothing saved yet" : "Import result"}</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[28rem] text-sm">
+              <thead><tr className="text-left text-xs text-muted"><th className="py-1 font-normal">Sheet</th><th className="py-1 text-right font-normal">Rows</th><th className="py-1 text-right font-normal">{checked ? "Will be imported" : "Imported"}</th><th className="py-1 text-right font-normal">Already present</th><th className="py-1 text-right font-normal">Skipped</th></tr></thead>
+              <tbody>{results.map((r) => <tr key={r.label} className="border-t border-border"><td className="py-1.5">{r.label}</td><td className="text-right tabular-nums">{r.total.toLocaleString()}</td><td className="text-right tabular-nums">{r.imported.toLocaleString()}</td><td className="text-right tabular-nums">{r.duplicates.toLocaleString()}</td><td className={cx("text-right tabular-nums", r.invalid.length > 0 && "text-expense")}>{r.invalid.length.toLocaleString()}</td></tr>)}</tbody>
+            </table>
+          </div>
+          {results.filter((r) => r.problems.length).map((r) => <p key={r.label} className="text-sm text-expense">{r.label}: {r.problems.join("; ")} — this sheet can&apos;t be imported until that&apos;s fixed.</p>)}
+          {results.filter((r) => r.invalid.length).map((r) => (
+            <details key={r.label} className="text-sm"><summary className="cursor-pointer text-expense">{r.label}: {r.invalid.length} row(s) will be skipped</summary>
+              <ul className="mt-2 max-h-48 space-y-1 overflow-auto text-xs">{r.invalid.slice(0, 100).map((i) => <li key={i.row}>Row {i.row + 1}: {i.reason}</li>)}</ul>
+            </details>
+          ))}
+          {done && <p className="text-sm text-income">Done. Everything imported is now available across the app.</p>}
+        </Card>
+      )}
     </div>
   );
 }

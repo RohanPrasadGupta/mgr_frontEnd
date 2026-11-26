@@ -17,6 +17,7 @@ export type RecurringRule = S["RecurringRule"];
 export type RunReport = S["RunReport"];
 export type ImportReport = S["ImportReport"];
 export type InvestmentImportReport = S["InvestmentImportReport"];
+export type NoteImportReport = S["NoteImportReport"];
 export type Asset = S["Asset"];
 export type Holding = S["Holding"];
 export type Portfolio = S["Portfolio"];

@@ -116,3 +116,59 @@ describe("Import investments", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Line 1 is not valid JSON");
   });
 });
+
+describe("Restore from old app", () => {
+  it("reads the old app's Excel backup, checks every sheet, then imports them all", async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const add = (name: string, rows: unknown[][]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
+    add("Transactions", [["Date", "Account", "Category", "Note", "Currency", "Amount", "Income/Expense"], ["2025-08-26 09:15:00", "Cash", "Food", "", "THB", 120, "Expense"], ["2025-08-25 09:00:00", "Bank", "Salary", "", "THB", 30000, "Income"]]);
+    add("Notes", [["Date", "Title", "Content"], ["2025-03-01 09:30:00", "Tax", "keep receipts"]]);
+    add("Categories", [["Name", "Type", "Currency"], ["🌐 work", "Expense", "THB"]]);
+    add("Currencies", [["Code", "Name", "Symbol", "Default"], ["THB", "Thai Baht", "฿", "TRUE"], ["XYZ", "Made up", "x", "FALSE"]]);
+    add("Stock trades", [["ID", "Date", "Symbol", "Name", "Type", "Price", "Quantity", "Total", "Currency", "Use for avg price"]]);
+    add("SIP capital", [["ID", "Date", "Name", "Amount", "Currency"], ["s1", "2024-02-01", "Growth Fund", 1000, "NPR"]]);
+    const file = new File([XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer], "moneymgr-backup.xlsx");
+
+    const inv = { source: "sip-capital", total: 1, imported: 1, duplicates: 0, invalid: [], createdAssets: [], positionErrors: [] };
+    const m = mockFetch({
+      ...baseRoutes,
+      "POST /imports/transactions": ({ body }: { body: { dryRun: boolean } }) => report({ dryRun: body.dryRun, invalid: [{ row: 2, reason: "amount: too big" }] }),
+      "POST /imports/notes": ({ body }: { body: { dryRun: boolean } }) => ({ data: { dryRun: body.dryRun, total: 1, imported: 1, duplicates: 0, invalid: [] } }),
+      "POST /imports/categories": ({ body }: { body: { dryRun: boolean } }) => ({ data: { dryRun: body.dryRun, total: 1, imported: 1, duplicates: 0, invalid: [], created: ["expense:work"] } }),
+      "POST /imports/investments": ({ body }: { body: { dryRun: boolean } }) => ({ data: { ...inv, dryRun: body.dryRun } }),
+    });
+    renderWithClient(<ImportExportView />);
+    await userEvent.click(screen.getByRole("radio", { name: "Restore from old app" }));
+    await userEvent.upload(screen.getByLabelText("Choose the backup file"), file);
+    expect(await screen.findByText("moneymgr-backup.xlsx")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import everything" })).toBeDisabled(); // check first
+    expect(await screen.findByText(/doesn't support XYZ/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Check/ }));
+    expect(await screen.findByText("Check result — nothing saved yet")).toBeInTheDocument();
+    expect(m.last("POST", "/imports/categories")!.body).toEqual({ dryRun: true, rows: [{ name: "🌐 work", type: "Expense" }] });
+    expect(m.last("POST", "/imports/notes")!.body).toEqual({ dryRun: true, rows: [{ title: "Tax", body: "keep receipts", date: "2025-03-01 09:30:00" }] });
+    expect(m.last("POST", "/imports/investments")!.body).toMatchObject({ source: "sip-capital", dryRun: true, rows: [{ _id: "s1", name: "Growth Fund", amount: 1000 }] });
+    expect(m.calls.filter((c) => c.path === "/imports/investments")).toHaveLength(1); // empty sheets are not sent
+    expect(screen.getByText(/Transactions: 1 row\(s\) will be skipped/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Import everything" }));
+    expect(await screen.findByText(/Everything imported is now available/)).toBeInTheDocument();
+    expect(m.calls.filter((c) => c.path.startsWith("/imports/")).map((c) => `${c.path}:${c.body.dryRun}`)).toEqual([
+      "/imports/categories:true", "/imports/transactions:true", "/imports/notes:true", "/imports/investments:true",
+      "/imports/categories:false", "/imports/transactions:false", "/imports/notes:false", "/imports/investments:false",
+    ]);
+  });
+
+  it("rejects a spreadsheet that isn't an old-app backup", async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["a"]]), "Sheet1");
+    mockFetch(baseRoutes);
+    renderWithClient(<ImportExportView />);
+    await userEvent.click(screen.getByRole("radio", { name: "Restore from old app" }));
+    await userEvent.upload(screen.getByLabelText("Choose the backup file"), new File([XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer], "other.xlsx"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/isn't a backup from the old MoneyMgr/);
+  });
+});

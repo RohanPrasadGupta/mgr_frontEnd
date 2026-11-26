@@ -529,6 +529,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/imports/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import categories (dry-run supported, idempotent) */
+        post: operations["importCategories"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import notes (dry-run supported, idempotent) */
+        post: operations["importNotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/imports/investments": {
         parameters: {
             query?: never;
@@ -1574,6 +1608,17 @@ export interface components {
             createdAt: string;
             deletedAt: string | null;
         };
+        CategoryImportReport: {
+            dryRun: boolean;
+            total: number;
+            imported: number;
+            duplicates: number;
+            invalid: {
+                row: number;
+                reason: string;
+            }[];
+            created: string[];
+        };
         Currency: {
             code: string;
             name: string;
@@ -1768,6 +1813,16 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        NoteImportReport: {
+            dryRun: boolean;
+            total: number;
+            imported: number;
+            duplicates: number;
+            invalid: {
+                row: number;
+                reason: string;
+            }[];
         };
         Portfolio: {
             baseCurrency: string;
@@ -3728,6 +3783,84 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["ImportReport"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    importCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    rows: unknown[];
+                    /** @default false */
+                    dryRun?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryImportReport"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    importNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    rows: unknown[];
+                    /** @default false */
+                    dryRun?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["NoteImportReport"];
                     };
                 };
             };

@@ -71,7 +71,7 @@ export function GroupedBarChart({ labels, series, format, axis, ariaLabel, heigh
               {series.map((s, j) => {
                 const h = Math.max(0, (s.values[i]! / max) * plotH);
                 const x = cx0 - (bw * series.length) / 2 + j * bw;
-                return <rect key={s.name} x={x} y={M.top + plotH - h} width={bw - 1} height={h} rx={2} style={{ animationDelay: `${Math.min(i, 24) * 18}ms` }} className={cx("chart-bar", s.className, active !== null && active !== i && "opacity-40")} />;
+                return <rect key={`${s.name}:${s.values[i]}`} x={x} y={M.top + plotH - h} width={bw - 1} height={h} rx={2} style={{ animationDelay: `${Math.min(i, 24) * 18}ms` }} className={cx("chart-bar", s.className, active !== null && active !== i && "opacity-40")} />;
               })}
               {i % every === 0 && <text x={cx0} y={height - 6} textAnchor="middle" className={Y_LABEL}>{l}</text>}
               <rect x={M.left + group * i} y={M.top} width={group} height={plotH} fill="transparent" tabIndex={0} aria-label={`${l}: ${series.map((s) => `${s.name} ${format(s.values[i]!)}`).join(", ")}`}
@@ -176,7 +176,7 @@ export function DonutChart({ slices, centerLabel, centerValue, format, ariaLabel
           {slices.map((s, i) => {
             const dash = Math.max(0.0001, s.pct - (slices.length > 1 ? 0.6 : 0)); // small gap between slices
             const offset = offsets[i];
-            return <circle key={s.label} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="chart-slice" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
+            return <circle key={`${s.label}:${s.pct.toFixed(2)}`} cx="21" cy="21" r={R} fill="none" style={{ stroke: s.color }} strokeWidth={active === i ? 6.5 : 5} strokeDasharray={`${dash} ${100 - dash}`} strokeDashoffset={offset} onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)} className="chart-slice" opacity={active !== null && active !== i ? 0.45 : 1}><title>{`${s.label}: ${format(s.value)} (${s.pct.toFixed(1)}%)`}</title></circle>;
           })}
         </svg>
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
@@ -211,8 +211,10 @@ export function Gauge({ pct, label, band }: { pct: number | null; label: string;
       <svg viewBox="0 0 100 58" className="w-full" role="img" aria-label={pct === null ? "Savings rate: no income" : `Savings rate ${pct.toFixed(1)}%, ${label}`}>
         <path d={`M${sx} ${sy} A${R} ${R} 0 0 1 ${ex} ${ey}`} fill="none" className="stroke-border" strokeWidth={9} strokeLinecap="round" />
         {pct !== null && pct > 0 && <path key={angle} d={`M${sx} ${sy} A${R} ${R} 0 ${angle > 180 ? 1 : 0} 1 ${vx} ${vy}`} pathLength={1} className="chart-line" fill="none" style={{ stroke: color }} strokeWidth={9} strokeLinecap="round" />}
+        {/* Below zero there is no point on a 0–100 dial: the whole track turns red so overspending is impossible to miss. */}
+        {pct !== null && pct < 0 && <path key={`neg:${pct.toFixed(1)}`} data-testid="gauge-overspent" d={`M${sx} ${sy} A${R} ${R} 0 0 1 ${ex} ${ey}`} pathLength={1} className="chart-line" fill="none" style={{ stroke: color, opacity: 0.45 }} strokeWidth={9} strokeLinecap="round" />}
         <line x1={t1x} y1={t1y} x2={t2x} y2={t2y} className="stroke-muted" strokeWidth={1.2} />
-        <text x={C} y={C - 4} textAnchor="middle" className="fill-fg text-[14px] font-semibold">{pct === null ? "—" : `${pct.toFixed(0)}%`}</text>
+        <text x={C} y={C - 4} textAnchor="middle" className={cx("text-[14px] font-semibold", pct !== null && pct < 0 ? "fill-expense" : "fill-fg")}>{pct === null ? "—" : `${pct.toFixed(0)}%`}</text>
         <text x={C} y={C + 6} textAnchor="middle" className="fill-muted text-[5px]">{label}</text>
       </svg>
       <div className="flex justify-between px-3 text-[10px] text-muted"><span>0%</span><span>20% healthy</span><span>100%</span></div>

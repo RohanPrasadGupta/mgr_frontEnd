@@ -136,7 +136,13 @@ describe("Gauge", () => {
     const hi = render(<Gauge pct={999} band="healthy" label="x" />);
     expect(hi.container.querySelectorAll("path")).toHaveLength(2);
     hi.unmount();
-    const neg = render(<Gauge pct={-50} band="overspending" label="x" />);
-    expect(neg.container.querySelectorAll("path")).toHaveLength(1); // negative rate has no arc
+  });
+  it("turns the whole dial red when spending exceeds income, instead of looking empty", () => {
+    const neg = render(<Gauge pct={-85} band="overspending" label="Spending more than earned" />);
+    expect(screen.getByRole("img", { name: "Savings rate -85.0%, Spending more than earned" })).toBeInTheDocument();
+    const arc = neg.getByTestId("gauge-overspent");
+    expect(arc.getAttribute("style")).toContain("var(--expense)");
+    expect(neg.container.querySelectorAll("path")).toHaveLength(2);
+    expect(screen.getByText("-85%").getAttribute("class")).toContain("fill-expense");
   });
 });

@@ -24,6 +24,7 @@ export default function PrivacyPage() {
         <li><strong>Receipts you attach:</strong> the image or PDF files and their names.</li>
         <li><strong>Sign-in sessions:</strong> for each signed-in device, the device/browser description (user agent) and when it signed in, so you stay signed in and sessions can be ended.</li>
         <li><strong>Security data:</strong> your IP address is used briefly to limit repeated sign-in attempts; these counters expire automatically within an hour.</li>
+        <li><strong>Server logs:</strong> for each request to our server, the time, the address requested, the result, how long it took, your IP address and your account ID — never what you entered. We use them to keep the service secure and fix problems. They are deleted automatically as newer entries replace them and are not included in backups.</li>
       </ul>
       <p>We don&apos;t connect to your bank, read your messages, or collect your location, contacts or device identifiers. The camera and photo library are used only when you choose to attach a receipt.</p>
 
