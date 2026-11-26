@@ -3426,6 +3426,11 @@
                   },
                   "archived": {
                     "type": "boolean"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
                   }
                 }
               }
@@ -9378,6 +9383,18 @@
                 "type": "null"
               }
             ]
+          },
+          "lastBuyPriceMinor": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastSellPriceMinor": {
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
@@ -9400,7 +9417,9 @@
           "closed",
           "tradeCount",
           "firstTradedOn",
-          "lastTradedOn"
+          "lastTradedOn",
+          "lastBuyPriceMinor",
+          "lastSellPriceMinor"
         ]
       },
       "ImportReport": {

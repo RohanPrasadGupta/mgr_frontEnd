@@ -1912,6 +1912,8 @@ export interface components {
             tradeCount: number;
             firstTradedOn: string | null;
             lastTradedOn: string | null;
+            lastBuyPriceMinor: number | null;
+            lastSellPriceMinor: number | null;
         };
         ImportReport: {
             dryRun: boolean;
@@ -4282,6 +4284,7 @@ export interface operations {
                     /** @enum {string} */
                     costMethod?: "wavg" | "fifo" | "manual";
                     archived?: boolean;
+                    currency?: string;
                 };
             };
         };

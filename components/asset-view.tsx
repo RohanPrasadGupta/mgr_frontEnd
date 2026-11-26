@@ -10,6 +10,7 @@ import { CLASS_LABEL, TYPES_FOR, TYPE_LABEL, isInflow } from "@/lib/investments"
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
 import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
+import { CurrencyOptions } from "./currency-options";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -28,6 +29,12 @@ export function AssetView() {
   // The trade id is the mutation's argument, so the request always targets the row whose Delete was pressed.
   const removeTrade = useMutate((tradeId: string) => call(client.DELETE("/investments/trades/{id}", { params: { path: { id: tradeId } } })), invalidateInvestments, "Entry deleted");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const toggleAvg = useMutate(({ tradeId, on }: { tradeId: string; on: boolean }) => call(client.PATCH("/investments/trades/{id}", { params: { path: { id: tradeId } }, body: { includeInAvg: on } })), invalidateInvestments);
+  async function changeCurrency(next: string) {
+    if (next === a.currency) return;
+    if (!(await confirm({ title: "Change currency?", confirmLabel: `Use ${next}`, message: `Show ${a.symbol} in ${next} instead of ${a.currency}?\n\nThis only changes the label: every amount and price stays the number you entered. Use it when the asset was recorded in the wrong currency.` }))) return;
+    await act(() => patch.mutateAsync({ currency: next }));
+  }
   async function deleteTrade(t: Trade) {
     if (!(await confirm({ message: `Delete this ${TYPE_LABEL[t.type].toLowerCase()} from ${fmtDate(t.tradedOn)}?`, destructive: true }))) return;
     setDeleting(t.id);
@@ -57,7 +64,7 @@ export function AssetView() {
       <section aria-label="Position" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {units ? (<>
           <Stat label="Units held" value={h.closed ? "0 (closed)" : formatQty(h.quantity)} />
-          <Stat label={a.costMethod === "manual" ? "Avg price (selected buys)" : "Avg cost / unit"} value={h.avgCostMinor === null ? "—" : formatUnitPrice(h.avgCostMinor, cur)} />
+          <Stat label={a.costMethod === "manual" || trades.data?.some((t) => t.type === "buy" && !t.includeInAvg) ? "Avg price (buys in average)" : "Avg cost / unit"} value={h.avgCostMinor === null ? "—" : formatUnitPrice(h.avgCostMinor, cur)} />
           <Stat label="Cost of holding" value={formatMoney(h.remainingCostMinor, cur)} />
           <Stat label="Market value" value={h.marketValueMinor === null ? "Set a price" : formatMoney(h.marketValueMinor, cur)} />
           <Stat label="Unrealised P/L" value={h.unrealisedPnlMinor === null ? "—" : formatMoney(h.unrealisedPnlMinor, cur, { sign: true })} cls={tone(h.unrealisedPnlMinor)} />
@@ -88,10 +95,11 @@ export function AssetView() {
                 <span className="w-20 shrink-0 text-xs text-muted">{fmtDate(t.tradedOn)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">{TYPE_LABEL[t.type]}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
-                  <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, a.costMethod === "manual" && t.type === "buy" && t.includeInAvg ? "in average" : null].filter(Boolean).join(" · ")}</span>
+                  <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, t.type === "buy" && !t.includeInAvg ? "not in average" : null].filter(Boolean).join(" · ")}</span>
                 </span>
                 <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : isInflow(t.type) ? "text-income" : "")}>{t.type === "bonus" ? "free" : `${isInflow(t.type) ? "+" : "−"}${formatMoney(t.amountMinor, cur)}`}</span>
-                <span className="ml-auto flex shrink-0 gap-1">
+                <span className="ml-auto flex shrink-0 items-center gap-1">
+                  {t.type === "buy" && <Switch checked={t.includeInAvg} disabled={a.archived || toggleAvg.isPending} label={`Use the buy of ${fmtDate(t.tradedOn)} for the average price`} onChange={(on) => act(() => toggleAvg.mutateAsync({ tradeId: t.id, on }))} />}
                   <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDialog({ trade: t })} disabled={a.archived} aria-label={`Edit ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Edit</Button>
                   <Button variant="ghost" className="px-2.5 py-1 text-xs text-expense" onClick={() => deleteTrade(t)} loading={deleting === t.id} disabled={a.archived || (deleting !== null && deleting !== t.id)} aria-label={`Delete ${TYPE_LABEL[t.type].toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Delete</Button>
                 </span>
@@ -110,6 +118,10 @@ export function AssetView() {
             </Select>
           </label>
         )}
+        <label className="flex items-center gap-2">
+          <span className="text-muted">Currency</span>
+          <Select value={a.currency} onChange={(e) => changeCurrency(e.target.value)} className="w-auto" disabled={patch.isPending}><CurrencyOptions current={a.currency} /></Select>
+        </label>
         <button className="text-muted underline" onClick={() => act(() => patch.mutateAsync({ archived: !a.archived }))}>{a.archived ? "Unarchive" : "Archive"}</button>
         <button className="text-muted underline hover:text-expense" onClick={async () => (await confirm({ message: `Delete ${a.symbol}? Assets with trades can only be archived.`, destructive: true })) && act(async () => { await remove.mutateAsync(undefined as never); router.replace("/investments"); })}>Delete asset</button>
       </Card>
@@ -198,7 +210,7 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
     if (qtyType) { if (!(Number(qty) > 0)) throw new Error("Enter a quantity greater than 0"); body.quantity = Number(qty); }
     if (priced) { if (!(Number(price) > 0)) throw new Error("Enter a price greater than 0"); body.priceMinor = Number((Number(price) * unit).toFixed(6)); }
     if (!qtyType) { if (!(Number(amount) > 0)) throw new Error("Enter an amount greater than 0"); body.amountMinor = toMinor(Number(amount), a.currency); }
-    if (a.costMethod === "manual" && type === "buy") body.includeInAvg = inAvg;
+    if (type === "buy") body.includeInAvg = inAvg;
     if (trade && type !== trade.type) body.type = type;
     return trade
       ? call(client.PATCH("/investments/trades/{id}", { params: { path: { id: trade.id } }, body }))
@@ -233,12 +245,25 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
         {type !== "bonus" && type !== "fee" && <Field label={`Fee / charge (${a.currency})`} hint="Optional"><Input type="number" step="0.01" min="0" value={fee} onChange={(e) => setFee(e.target.value)} /></Field>}
         <Field label="Date"><Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Note"><Input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" /></Field>
-        {a.costMethod === "manual" && type === "buy" && (
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inAvg} onChange={(e) => setInAvg(e.target.checked)} />Use this buy for the displayed average price</label>
+        {type === "buy" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <span className="text-sm">Use for average price<span className="block text-xs text-muted">Off: this buy still counts toward cost and P/L, but not toward the average price shown.</span></span>
+            <Switch checked={inAvg} onChange={setInAvg} label="Use for average price" />
+          </div>
         )}
         {error && <ErrorNote error={new Error(error)} />}
         <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
       </form>
     </Modal>
+  );
+}
+
+/** On/off switch (role="switch"), used for "use for average price". */
+function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} title={label} disabled={disabled} onClick={() => onChange(!checked)}
+      className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50", checked ? "bg-primary" : "bg-border")}>
+      <span className={cx("inline-block size-4 rounded-full bg-card shadow transition", checked ? "translate-x-4.5" : "translate-x-0.5")} />
+    </button>
   );
 }

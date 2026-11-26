@@ -53,6 +53,8 @@ export const useRecurring = () => useQuery({ queryKey: ["recurring"] as const, q
 
 export const usePortfolio = () => useQuery({ queryKey: ["investments", "portfolio"] as const, queryFn: async () => (await call(client.GET("/investments/portfolio"))).data, staleTime: 30_000 });
 export const useHolding = (id: string) => useQuery({ queryKey: ["investments", "asset", id] as const, queryFn: async () => (await call(client.GET("/investments/assets/{id}", { params: { path: { id } } }))).data, staleTime: 15_000 });
+/** Every entry across assets for the investments board (the API returns at most 500, newest first). */
+export const useAllTrades = () => useQuery({ queryKey: ["investments", "trades", "all"] as const, queryFn: async () => (await call(client.GET("/investments/trades", { params: { query: { limit: 500 } } }))).data, staleTime: 15_000 });
 export const useAssetTrades = (id: string) => useQuery({ queryKey: ["investments", "trades", id] as const, queryFn: async () => (await call(client.GET("/investments/trades", { params: { query: { assetId: id, limit: 500 } } }))).data, staleTime: 15_000 });
 export const useAssetPrices = (id: string) => useQuery({ queryKey: ["investments", "prices", id] as const, queryFn: async () => (await call(client.GET("/investments/assets/{id}/prices", { params: { path: { id } } }))).data, staleTime: 30_000 });
 export const invalidateInvestments = (qc: QueryClient) => qc.invalidateQueries({ queryKey: ["investments"] });
