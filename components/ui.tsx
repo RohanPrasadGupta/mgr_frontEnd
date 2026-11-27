@@ -153,5 +153,5 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
 }
 
 
-/** A long list of records keeps the page in place: it tops out at 600px and scrolls inside itself. */
-export const SCROLL_LIST = "max-h-[600px] overflow-y-auto pr-1";
+/** A long list of records keeps the page in place: it tops out at 550px and scrolls inside itself. */
+export const SCROLL_LIST = "max-h-[550px] overflow-y-auto pr-1";
