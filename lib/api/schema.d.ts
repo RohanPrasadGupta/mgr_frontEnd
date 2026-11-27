@@ -3289,6 +3289,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    accountId?: string;
                     amountMinor?: number;
                     categoryId?: string | null;
                     /** Format: date-time */

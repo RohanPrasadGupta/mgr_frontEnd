@@ -1713,6 +1713,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "accountId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "amountMinor": {
                     "type": "integer",
                     "exclusiveMinimum": 0

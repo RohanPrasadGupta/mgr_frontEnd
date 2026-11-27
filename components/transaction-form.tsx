@@ -57,7 +57,8 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
   const accountId = pickedAccountId || (tx ? "" : (accounts.data?.find((a) => !a.archived)?.id ?? ""));
   const account = accounts.data?.find((a) => a.id === accountId);
   const cats = useMemo(() => (categories.data ?? []).filter((c) => c.kind === kind && !c.archived), [categories.data, kind]);
-  const foreign = !!account && !!me && account.currency !== me.baseCurrency && !editing;
+  // a rate is needed for a new foreign-currency transaction, or when an edit moves it into another foreign currency
+  const foreign = !!account && !!me && account.currency !== me.baseCurrency && (!editing || account.currency !== tx!.currency);
 
   const save = useMutate(async () => {
     const major = Number(amount);
@@ -65,7 +66,14 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
     const occurredAt = new Date(when).toISOString();
     if (editing) {
       if (!transfer && !(major > 0)) throw new Error("Enter an amount greater than 0");
-      const body: Body<"/transactions/{id}", "patch"> = { occurredAt, note: note || null, tagIds, ...(transfer ? {} : { amountMinor: toMinor(major, tx!.currency), categoryId: categoryId || null }) };
+      const moved = !transfer && !!account && account.id !== tx!.accountId;
+      if (moved && fx && !(Number(fx) > 0)) throw new Error("Enter a valid exchange rate or leave it empty");
+      const cur = moved ? account!.currency : tx!.currency;
+      const body: Body<"/transactions/{id}", "patch"> = {
+        occurredAt, note: note || null, tagIds,
+        ...(transfer ? {} : { amountMinor: toMinor(major, cur), categoryId: categoryId || null }),
+        ...(moved ? { accountId: account!.id, ...(fx && account!.currency !== tx!.currency ? { fxRate: Number(fx) } : {}) } : {}),
+      };
       return call(client.PATCH("/transactions/{id}", { params: { path: { id: tx!.id } }, body }));
     }
     if (!account) throw new Error("Choose an account");
@@ -101,10 +109,11 @@ export function TransactionForm({ open, onClose, tx }: { open: boolean; onClose:
             <Input inputMode="decimal" type="number" step={minorUnit(account?.currency ?? "THB") === 0 ? "1" : "0.01"} min="0" required value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
           </Field>
         )}
-        {!editing && (
-          <Field label="Account">
+        {!transfer && (
+          <Field label="Account" hint={editing && account && account.currency !== tx!.currency ? `The amount stays ${amount || "the same"}, now in ${account.currency}.` : undefined}>
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
-              {accounts.data?.filter((a) => !a.archived).map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+              {/* an archived account still shows when it's the one this transaction is in */}
+              {accounts.data?.filter((a) => !a.archived || a.id === tx?.accountId).map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
             </Select>
           </Field>
         )}

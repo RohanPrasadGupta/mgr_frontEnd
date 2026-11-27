@@ -88,12 +88,13 @@ describe("TransactionForm — edit", () => {
     await open(<TransactionForm open tx={tx()} onClose={onClose} />, categoriesLoaded);
     expect(screen.getByLabelText(/^Amount/)).toHaveValue(123.45);
     expect(screen.getByLabelText("Note")).toHaveValue("lunch");
-    expect(screen.queryByLabelText("Account")).not.toBeInTheDocument(); // account can't change
+    expect(screen.getByLabelText("Account")).toHaveValue("a-cash"); // the account it's in, and it can change
     await userEvent.clear(screen.getByLabelText(/^Amount/));
     await userEvent.type(screen.getByLabelText(/^Amount/), "200");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(m.last("PATCH", "/transactions/t9")!.body).toMatchObject({ amountMinor: 20_000, categoryId: "c-food", note: "lunch" });
+    expect(m.last("PATCH", "/transactions/t9")!.body).not.toHaveProperty("accountId"); // unchanged → not sent
 
     vi.stubGlobal("confirm", vi.fn(() => false));
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -103,12 +104,32 @@ describe("TransactionForm — edit", () => {
     await waitFor(() => expect(m.last("DELETE", "/transactions/t9")).toBeDefined());
   });
 
+  it("moves a transaction to another account; into another currency the amount stays and a rate can be given", async () => {
+    const m = mockFetch(routes({ "PATCH /transactions/t9": { data: {} } }));
+    await open(<TransactionForm open tx={tx()} onClose={vi.fn()} />, categoriesLoaded);
+    await userEvent.selectOptions(screen.getByLabelText(/^Account/), "a-bank");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/transactions/t9")!.body).toMatchObject({ accountId: "a-bank", amountMinor: 12_345 }));
+    expect(m.last("PATCH", "/transactions/t9")!.body).not.toHaveProperty("fxRate");
+  });
+
+  it("asks for the rate when an edit moves it into a foreign-currency account", async () => {
+    const m = mockFetch(routes({ "PATCH /transactions/t9": { data: {} } }));
+    await open(<TransactionForm open tx={tx()} onClose={vi.fn()} />, categoriesLoaded);
+    await userEvent.selectOptions(screen.getByLabelText(/^Account/), "a-npr");
+    expect(screen.getByText(/now in NPR/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Exchange rate|rate/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/transactions/t9")!.body).toMatchObject({ accountId: "a-npr", amountMinor: 12_345 }));
+  });
+
   it("treats transfers as date/note-only", async () => {
     const m = mockFetch(routes({ "PATCH /transactions/t9": { data: {} } }));
     await open(<TransactionForm open tx={tx({ kind: "transfer_out", categoryId: null, transferGroupId: "g1" })} onClose={vi.fn()} />, () => screen.findByRole("heading", { name: "Edit transfer" }));
     expect(screen.getByRole("heading", { name: "Edit transfer" })).toBeInTheDocument();
     expect(screen.queryByLabelText(/^Amount/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Category")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Account/)).not.toBeInTheDocument(); // a transfer moves between two accounts; edit both by recreating
     await userEvent.clear(screen.getByLabelText("Note"));
     await userEvent.type(screen.getByLabelText("Note"), "moved");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));

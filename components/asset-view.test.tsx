@@ -142,7 +142,7 @@ describe("asset trades", () => {
     const showIn = screen.getByLabelText("Show in");
     await waitFor(() => expect(within(showIn).getAllByRole("option").length).toBeGreaterThan(2));
     await u.selectOptions(showIn, "NPR");
-    await u.type(screen.getByLabelText(/^Rate: 1 THB =/), "4.18");
+    await u.type(screen.getByLabelText(/^Rate in NPR per THB/), "4.18");
     await u.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ convertCurrency: "NPR", convertRate: 4.18 }));
   });

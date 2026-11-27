@@ -321,8 +321,9 @@ function ConversionCard({ h }: { h: Holding }) {
       </div>
       {editing && (
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-3">
-          <Field label="Show in"><Select value={to} onChange={(e) => setTo(e.target.value)} className="w-32" required><option value="">Choose…</option><CurrencyOptions current={to || undefined} /></Select></Field>
-          <Field label={`Rate: 1 ${a.currency} =`} hint={to ? `${to} per ${a.currency}` : undefined}><Input type="number" step="any" min="0" required value={rate} onChange={(e) => setRate(e.target.value)} className="w-36" placeholder="e.g. 4.18" /></Field>
+          {/* no hints under the fields: everything in this row keeps one baseline */}
+          <div className="w-40"><Field label="Show in"><Select value={to} onChange={(e) => setTo(e.target.value)} required><option value="">Choose…</option><CurrencyOptions current={to || undefined} /></Select></Field></div>
+          <div className="w-48"><Field label={`Rate: 1 ${a.currency} = ? ${to || "…"}`}><Input type="number" step="any" min="0" required value={rate} onChange={(e) => setRate(e.target.value)} placeholder="e.g. 4.18" aria-label={`Rate in ${to || "the chosen currency"} per ${a.currency}`} /></Field></div>
           <Button type="submit" loading={save.isPending}>Save</Button>
           <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null); }}>Cancel</Button>
           {on && <Button type="button" variant="ghost" className="text-expense" onClick={remove} disabled={save.isPending}>Remove conversion</Button>}
