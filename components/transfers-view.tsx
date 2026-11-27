@@ -6,7 +6,7 @@ import { formatMoney, monthRange } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
 import { TransactionForm } from "./transaction-form";
 import { TransferDialog } from "./transfer-dialog";
-import { Button, Card, Empty, ErrorNote, ListSkeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, ListSkeleton, cx, SCROLL_LIST } from "./ui";
 
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -35,7 +35,7 @@ export function TransfersView() {
         <Empty>No transfers this month.</Empty>
       ) : (
         <Card className={cx("p-2", transfers.isPlaceholderData && "refreshing")}>
-          <ul className="stagger divide-y divide-border">
+          <ul className={cx("stagger divide-y divide-border", SCROLL_LIST)}>
             {transfers.data.map((p: TransferPair) => (
               <li key={p.groupId}>
                 <button onClick={() => setEditing(p.out)} className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left hover:bg-border/40">

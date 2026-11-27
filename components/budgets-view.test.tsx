@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { T0, baseRoutes } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption, setDate } from "@/test/utils";
 import type { BudgetStatusItem } from "@/lib/api/types";
 import { BudgetsView } from "./budgets-view";
 
@@ -46,7 +46,7 @@ describe("BudgetsView", () => {
     const m = mockFetch(routes([], { "POST /budgets": { data: {} } }));
     renderWithClient(<BudgetsView />);
     await userEvent.click(await screen.findByRole("button", { name: "+ Add budget" }));
-    await userEvent.selectOptions(screen.getByLabelText("Category"), "c-food");
+    await selectOption(screen.getByLabelText("Category"), "c-food");
     await userEvent.type(screen.getByLabelText(/^Limit/), "1000");
     await userEvent.clear(screen.getByLabelText(/Warn me/));
     await userEvent.type(screen.getByLabelText(/Warn me/), "90");
@@ -61,7 +61,7 @@ describe("BudgetsView", () => {
     await userEvent.click(await screen.findByRole("button", { name: "+ Add budget" }));
     const sw = screen.getByRole("switch", { name: "Repeat every month" });
     expect(sw).toHaveAttribute("aria-checked", "true");
-    await userEvent.type(screen.getByLabelText(/^Starts/), "2026-02-10");
+    setDate(screen.getByLabelText(/^Starts/), "2026-02-10");
     await userEvent.type(screen.getByLabelText(/^Limit/), "100");
     await userEvent.click(sw);
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -89,7 +89,7 @@ describe("BudgetsView", () => {
     mockFetch(routes([]));
     renderWithClient(<BudgetsView />);
     await userEvent.click(await screen.findByRole("button", { name: "+ Add budget" }));
-    await userEvent.selectOptions(screen.getByLabelText("Period"), "custom");
+    await selectOption(screen.getByLabelText("Period"), "custom");
     expect(screen.getByLabelText("To")).toBeRequired();
     expect(screen.getByLabelText("From")).toBeRequired();
   });

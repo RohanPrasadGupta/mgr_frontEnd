@@ -6,11 +6,12 @@ import { useResetOn } from "@/lib/use-reset";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, useAssetPrices, useAssetTrades, useHolding, useMutate } from "@/lib/api/hooks";
 import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/types";
-import { CLASS_LABEL, amountOnlyTrade, defaultTracking, entryLabel, isInflow, typesFor } from "@/lib/investments";
+import { CLASS_LABEL, amountOnlyTrade, defaultTracking, entryLabel, typesFor } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
+import { EntryAmount, EntryIcon } from "./entry-amount";
 import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, Switch, cx } from "./ui";
 import { useConfirm } from "./feedback";
-import { CurrencyOptions } from "./currency-options";
+import { CurrencySelect } from "./currency-options";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -90,15 +91,16 @@ export function AssetView() {
       <Card>
         <h2 className="mb-2 text-sm font-semibold">{units || amountOnlyTrade(a) ? "Trades" : "Contributions & withdrawals"}</h2>
         {trades.isPending ? <ListSkeleton rows={3} /> : trades.error ? <ErrorNote error={trades.error} /> : trades.data.length === 0 ? <Empty>Nothing recorded yet.</Empty> : (
-          <ul className="divide-y divide-border">
+          <ul className="max-h-[500px] divide-y divide-border overflow-y-auto pr-1">
             {trades.data.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-2.5">
+                <EntryIcon type={t.type} />
                 <span className="w-20 shrink-0 text-xs text-muted">{fmtDate(t.tradedOn)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">{entryLabel(t.type, a)}{t.quantity !== null && <span className="font-normal text-muted"> · {formatQty(t.quantity)}{t.priceMinor !== null && ` × ${formatUnitPrice(t.priceMinor, cur)}`}</span>}</span>
                   <span className="block truncate text-xs text-muted">{[t.note, t.feeMinor ? `fee ${formatMoney(t.feeMinor, cur)}` : null, t.type === "buy" && !t.includeInAvg ? "not in average" : null].filter(Boolean).join(" · ")}</span>
                 </span>
-                <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : isInflow(t.type) ? "text-income" : "")}>{t.type === "bonus" ? "free" : `${isInflow(t.type) ? "+" : "−"}${formatMoney(t.amountMinor, cur)}`}</span>
+                <EntryAmount type={t.type} amountMinor={t.amountMinor} currency={cur} />
                 <span className="ml-auto flex shrink-0 items-center gap-1">
                   {t.type === "buy" && <Switch checked={t.includeInAvg} disabled={a.archived || toggleAvg.isPending} label={`Use the buy of ${fmtDate(t.tradedOn)} for the average price`} onChange={(on) => act(() => toggleAvg.mutateAsync({ tradeId: t.id, on }))} />}
                   <Button variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDialog({ trade: t })} disabled={a.archived} aria-label={`Edit ${entryLabel(t.type, a).toLowerCase()} of ${fmtDate(t.tradedOn)}`}>Edit</Button>
@@ -112,25 +114,25 @@ export function AssetView() {
 
       <Card className="flex flex-wrap items-center gap-3 text-sm">
         {units && (
-          <label className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <span className="text-muted">Cost method</span>
-            <Select value={a.costMethod} onChange={(e) => act(() => patch.mutateAsync({ costMethod: e.target.value as CostMethod }))} className="w-auto">
+            <Select aria-label="Cost method" value={a.costMethod} onChange={(e) => act(() => patch.mutateAsync({ costMethod: e.target.value as CostMethod }))} className="w-auto">
               <option value="wavg">Weighted average</option><option value="fifo">FIFO</option><option value="manual">Selected buys</option>
             </Select>
-          </label>
+          </div>
         )}
         {trades.data?.length === 0 && (a.class === "crypto" || a.tracking !== defaultTracking(a.class)) && (
-          <label className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <span className="text-muted">Recorded by</span>
-            <Select value={a.tracking} onChange={(e) => act(() => patch.mutateAsync({ tracking: e.target.value as "units" | "value" }))} className="w-auto" title="Can be changed until the first entry is recorded">
+            <Select aria-label="Recorded by" value={a.tracking} onChange={(e) => act(() => patch.mutateAsync({ tracking: e.target.value as "units" | "value" }))} className="w-auto" title="Can be changed until the first entry is recorded">
               <option value="value">Amount only</option><option value="units">Units and price</option>
             </Select>
-          </label>
+          </div>
         )}
-        <label className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="text-muted">Currency</span>
-          <Select value={a.currency} onChange={(e) => changeCurrency(e.target.value)} className="w-auto" disabled={patch.isPending}><CurrencyOptions current={a.currency} /></Select>
-        </label>
+          <div className="w-28"><CurrencySelect aria-label="Currency" value={a.currency} onChange={(e) => changeCurrency(e.target.value)} disabled={patch.isPending} current={a.currency} /></div>
+        </div>
         <button className="text-muted underline" onClick={() => act(() => patch.mutateAsync({ archived: !a.archived }))}>{a.archived ? "Unarchive" : "Archive"}</button>
         <button className="text-muted underline hover:text-expense" onClick={async () => (await confirm({ message: `Delete ${a.symbol}? Assets with trades can only be archived.`, destructive: true })) && act(async () => { await remove.mutateAsync(undefined as never); router.replace("/investments"); })}>Delete asset</button>
       </Card>
@@ -312,7 +314,7 @@ function ConversionCard({ h }: { h: Holding }) {
       {editing && (
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-3">
           {/* no hints under the fields: everything in this row keeps one baseline */}
-          <div className="w-40"><Field label="Show in"><Select value={to} onChange={(e) => setTo(e.target.value)} required><option value="">Choose…</option><CurrencyOptions current={to || undefined} /></Select></Field></div>
+          <div className="w-40"><Field label="Show in"><CurrencySelect value={to} onChange={(e) => setTo(e.target.value)} required empty="Choose…" current={to || undefined} /></Field></div>
           <div className="w-48"><Field label={`Rate: 1 ${a.currency} = ? ${to || "…"}`}><Input type="number" step="any" min="0" required value={rate} onChange={(e) => setRate(e.target.value)} placeholder="e.g. 4.18" aria-label={`Rate in ${to || "the chosen currency"} per ${a.currency}`} /></Field></div>
           <Button type="submit" loading={save.isPending}>Save</Button>
           <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null); }}>Cancel</Button>

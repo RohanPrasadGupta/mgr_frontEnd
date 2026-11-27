@@ -9,7 +9,7 @@ import { useConfirm } from "./feedback";
 import { MonthPicker } from "./month-picker";
 import { TransactionForm } from "./transaction-form";
 import { TransactionRow } from "./transaction-row";
-import { Button, Card, Empty, ErrorNote, Input, ListSkeleton, Segmented, Select, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Input, ListSkeleton, Segmented, Select, cx, SCROLL_LIST } from "./ui";
 
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -80,7 +80,7 @@ export function TransactionsView() {
       {list.isPending ? <ListSkeleton rows={8} /> : list.error ? <ErrorNote error={list.error} retry={() => list.refetch()} /> : days.length === 0 ? (
         <Empty>{q || kind || accountId || tagId ? "No transactions match these filters." : "No transactions this month."}</Empty>
       ) : (
-        <div className={cx("space-y-3 transition-opacity", list.isPlaceholderData && "refreshing")} aria-busy={list.isPlaceholderData || undefined}>
+        <div className={cx("space-y-3 transition-opacity", SCROLL_LIST, list.isPlaceholderData && "refreshing")} aria-busy={list.isPlaceholderData || undefined}>
           {days.map((d) => (
             <Card key={d.day} className="anim-rise p-3">
               <div className="mb-1 flex items-center justify-between px-2 text-xs text-muted">

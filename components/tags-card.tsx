@@ -5,7 +5,7 @@ import { invalidateTags, useMutate, useTags } from "@/lib/api/hooks";
 import type { Tag } from "@/lib/api/types";
 import { useConfirm } from "./feedback";
 import { RowActions } from "./row-actions";
-import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Skeleton } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, Modal, Skeleton, SCROLL_LIST, cx } from "./ui";
 
 export function TagsCard() {
   const tags = useTags();
@@ -30,7 +30,7 @@ export function TagsCard() {
         <Button variant="ghost" onClick={() => { setError(null); setEditing("new"); }}>+ Tag</Button>
       </div>
       {tags.isPending ? <Skeleton className="h-16" /> : tags.error ? <ErrorNote error={tags.error} retry={() => tags.refetch()} /> : tags.data.length === 0 ? <Empty>No tags yet. Add one here or while entering a transaction.</Empty> : (
-        <ul className="divide-y divide-border">
+        <ul className={cx("divide-y divide-border", SCROLL_LIST)}>
           {tags.data.map((t) => (
             <li key={t.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
               <span className="min-w-0 truncate"><span className="text-primary">#</span>{t.name} <span className="text-xs text-muted">· {t.usageCount} use{t.usageCount === 1 ? "" : "s"}</span></span>

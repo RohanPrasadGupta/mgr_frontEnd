@@ -5,7 +5,7 @@ import type { Body, Category } from "@/lib/api/types";
 import { qk, useCategories, useMutate } from "@/lib/api/hooks";
 import { RowActions } from "./row-actions";
 import { TagsCard } from "./tags-card";
-import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Segmented } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Segmented, SCROLL_LIST, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalidateQueries({ queryKey: qk.categories });
@@ -49,7 +49,7 @@ export function CategoriesView() {
               <Card key={k}>
                 <h2 className="mb-2 flex justify-between text-sm font-semibold capitalize"><span>{k}</span><span className="font-normal text-muted">{items.length}</span></h2>
                 {items.length === 0 ? <Empty>None yet.</Empty> : (
-                  <ul className="stagger divide-y divide-border">
+                  <ul className={cx("stagger divide-y divide-border", SCROLL_LIST)}>
                     {items.map((c) => (
                       <li key={c.id} className="flex items-center justify-between py-2 text-sm">
                         <span className="truncate"><span aria-hidden className="mr-2">{c.icon ?? "•"}</span>{c.name}</span>

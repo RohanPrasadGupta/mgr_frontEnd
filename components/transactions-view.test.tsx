@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { T0, baseRoutes } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption } from "@/test/utils";
 import type { Transaction } from "@/lib/api/types";
 import { TransactionsView } from "./transactions-view";
 
@@ -36,7 +36,7 @@ describe("TransactionsView", () => {
     const lastUrl = () => decodeURIComponent(m.urls("/transactions").at(-1)!);
     await userEvent.click(screen.getByRole("radio", { name: "Expense" }));
     await waitFor(() => expect(lastUrl()).toContain("kind=expense"));
-    await userEvent.selectOptions(screen.getByLabelText("Account"), "a-bank");
+    await selectOption(screen.getByLabelText("Account"), "a-bank");
     await waitFor(() => expect(lastUrl()).toContain("accountId=a-bank"));
     const before = m.calls.length;
     await userEvent.type(screen.getByLabelText("Search"), "coffee");

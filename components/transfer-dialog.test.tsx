@@ -2,12 +2,12 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { baseRoutes, bank, cash, npr, usd } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption, valueOf, optionValuesOf } from "@/test/utils";
 import { TransferDialog } from "./transfer-dialog";
 
 const routes = (accounts = baseRoutes["GET /accounts"]) => ({ ...baseRoutes, "GET /accounts": accounts, "POST /transfers": { data: { transferGroupId: "g1", legs: [] } } });
 async function open(onClose = vi.fn(), defaultFrom?: string) { const r = renderWithClient(<TransferDialog open onClose={onClose} defaultFrom={defaultFrom} />); await screen.findByLabelText("From"); await waitFor(() => expect((screen.getByLabelText("From") as HTMLSelectElement).value).not.toBe("")); return { onClose, ...r }; }
-const pick = (label: string, id: string) => userEvent.selectOptions(screen.getByLabelText(label), id);
+const pick = (label: string, id: string) => selectOption(screen.getByLabelText(label), id);
 
 describe("TransferDialog", () => {
   it("defaults to the first two accounts and sends a same-currency transfer without a received amount", async () => {
@@ -25,20 +25,19 @@ describe("TransferDialog", () => {
   it("preselects the account it was opened from", async () => {
     mockFetch(routes());
     await open(vi.fn(), bank.id);
-    expect(screen.getByLabelText("From")).toHaveValue(bank.id);
-    expect(screen.getByLabelText("To")).not.toHaveValue(bank.id);
+    expect(valueOf(screen.getByLabelText("From"))).toBe(bank.id);
+    expect(valueOf(screen.getByLabelText("To"))).not.toBe(bank.id);
   });
 
   it("cannot pick the same account on both sides, and swap flips them", async () => {
     mockFetch(routes());
     await open();
-    const to = screen.getByLabelText("To") as HTMLSelectElement;
-    expect([...to.options].map((o) => o.value)).not.toContain(cash.id);
+    expect(await optionValuesOf(screen.getByLabelText("To"))).not.toContain(cash.id);
     await userEvent.click(screen.getByRole("button", { name: "Swap accounts" }));
-    expect(screen.getByLabelText("From")).toHaveValue(bank.id);
-    expect(screen.getByLabelText("To")).toHaveValue(cash.id);
+    expect(valueOf(screen.getByLabelText("From"))).toBe(bank.id);
+    expect(valueOf(screen.getByLabelText("To"))).toBe(cash.id);
     await pick("From", usd.id);
-    expect(screen.getByLabelText("To")).not.toHaveValue(usd.id);
+    expect(valueOf(screen.getByLabelText("To"))).not.toBe(usd.id);
   });
 
   it("requires the received amount across currencies, shows the implied rate, and sends toAmountMinor", async () => {

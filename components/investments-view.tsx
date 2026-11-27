@@ -7,14 +7,17 @@ import { useConfirm } from "./feedback";
 import { call, client } from "@/lib/api/client";
 import { invalidateInvestments, qk, useAllTrades, useMe, useMutate, usePortfolio } from "@/lib/api/hooks";
 import type { AssetClass, Body, CostMethod, Holding, Trade } from "@/lib/api/types";
-import { CLASS_BORDER, CLASS_DOT, CLASS_FILL, CLASS_LABEL, CLASS_STROKE, CLASS_TEXT, CLASS_VAR, RECORD_CHOICE, amountOnlyTrade, defaultTracking, entryLabel, isInflow } from "@/lib/investments";
+import { CLASS_BORDER, CLASS_DOT, CLASS_FILL, CLASS_LABEL, CLASS_STROKE, CLASS_TEXT, CLASS_VAR, RECORD_CHOICE, amountOnlyTrade, defaultTracking, entryLabel } from "@/lib/investments";
 import { assetIndex, classesOf, portfolioValue, shownIn, currenciesOf, lastMonths, monthlyCapital, recent, totalsByClass, yearlyCapital, type ClassTotals, type PerCurrency } from "@/lib/invest-board";
 import { compact, toSlices } from "@/lib/chart-utils";
 import { DonutChart, GroupedBarChart, LineChart, NoData } from "./charts";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, toMajor } from "@/lib/money";
-import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, Skeleton, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, Skeleton, cx, SCROLL_LIST } from "./ui";
 import { PortfolioChart } from "./portfolio-chart";
-import { CurrencyOptions } from "./currency-options";
+import { exportFileName, investmentSheets } from "@/lib/invest-export";
+import { todayIso } from "@/lib/dates";
+import { EntryAmount, EntryIcon } from "./entry-amount";
+import { CurrencySelect } from "./currency-options";
 
 const tone = (n: number | null) => (n === null || n === 0 ? "" : n > 0 ? "text-income" : "text-expense");
 
@@ -34,11 +37,30 @@ export function InvestmentsView() {
   const portfolio = usePortfolio();
   const trades = useAllTrades();
   const [adding, setAdding] = useState<AssetClass | null>(null);
+  const [exporting, setExporting] = useState(false);
   const tab = useSyncExternalStore(subscribeTab, readTab, () => "overview" as Tab);
   const setTab = writeTab;
   const p = portfolio.data;
   const classes = p ? classesOf(p.holdings) : [];
   const active: Tab = tab !== "overview" && !classes.includes(tab) ? "overview" : tab;
+
+  /** Every entry of the open type (or of all types, one sheet each) as an Excel file. Read fresh per asset, not from the board's 500-entry sample. */
+  async function exportEntries() {
+    if (!p) return;
+    setExporting(true);
+    try {
+      const cls = active === "overview" ? classes : [active];
+      const list = p.holdings.map((h) => h.asset).filter((a) => cls.includes(a.class));
+      const all = (await Promise.all(list.map(async (a) => (await call(client.GET("/investments/trades", { params: { query: { assetId: a.id, limit: 500 } } }))).data))).flat();
+      const XLSX = await import("xlsx"); // loaded on demand
+      const wb = XLSX.utils.book_new();
+      const header = ["Date", "Symbol", "Name", "Type", "Quantity", "Price", "Amount", "Signed amount", "Fee", "Currency", "Use for average", "Note"];
+      for (const s of investmentSheets(all, list, cls)) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s.rows, { header }), s.name);
+      XLSX.writeFile(wb, exportFileName(active === "overview" ? "all" : active, todayIso()));
+      toast.success(`Exported ${all.length} ${all.length === 1 ? "entry" : "entries"}`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Export failed"); }
+    finally { setExporting(false); }
+  }
 
   return (
     <div className="space-y-5">
@@ -47,8 +69,13 @@ export function InvestmentsView() {
           <h1 className="text-2xl font-semibold">Investments</h1>
           <p className="text-sm text-muted">Each kind of investment you add gets its own tab.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href="/investments/calculator" className="inline-flex items-center rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium hover:bg-border/40">SIP calculator</Link>
+          {p && p.holdings.length > 0 && (
+            <Button variant="ghost" onClick={() => void exportEntries()} loading={exporting} aria-label={`Export ${active === "overview" ? "all investment entries" : `${CLASS_LABEL[active]} entries`} to Excel`}>
+              Export {active === "overview" ? "all" : CLASS_LABEL[active]}
+            </Button>
+          )}
           <Button onClick={() => setAdding(active === "overview" ? "stock" : active)}>+ Add {active === "overview" ? "asset" : CLASS_LABEL[active].toLowerCase()}</Button>
         </div>
       </div>
@@ -176,20 +203,19 @@ function Overview({ p, trades, tradesError, onOpen }: { p: Portfolio; trades?: T
 function ActivityList({ trades, assets }: { trades: Trade[]; assets: ReturnType<typeof assetIndex> }) {
   if (trades.length === 0) return <Empty>Nothing recorded yet.</Empty>;
   return (
-    <ul className="divide-y divide-border" aria-label="Recent activity">
+    <ul className={cx("divide-y divide-border", SCROLL_LIST)} aria-label="Recent activity">
       {trades.map((t) => {
         const a = assets.get(t.assetId);
         if (!a) return null;
-        const inflow = isInflow(t.type);
         return (
           <li key={t.id}>
             <Link href={`/investments/${t.assetId}`} className="flex items-center gap-3 px-1 py-2.5 hover:bg-border/30">
-              <span className={cx("grid size-8 shrink-0 place-items-center rounded-full text-sm text-white", CLASS_DOT[a.cls])} aria-hidden>{inflow ? "↘" : "↗"}</span>
+              <EntryIcon type={t.type} className="size-8" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{CLASS_LABEL[a.cls]} · {a.symbol} <span className="font-normal text-muted">· {entryLabel(t.type, { class: a.cls, tracking: a.tracking })}{t.quantity !== null ? ` ${formatQty(t.quantity)}` : ""}</span></span>
                 <span className="block text-xs text-muted">{fmtDay(t.tradedOn)}</span>
               </span>
-              <span className={cx("text-sm font-semibold tabular-nums", t.type === "bonus" ? "text-muted" : inflow ? "text-income" : CLASS_TEXT[a.cls])}>{t.type === "bonus" ? "free" : `${inflow ? "+" : ""}${formatMoney(t.amountMinor, a.currency)}`}</span>
+              <EntryAmount type={t.type} amountMinor={t.amountMinor} currency={a.currency} />
             </Link>
           </li>
         );
@@ -230,7 +256,7 @@ function ClassTab({ cls, p, trades }: { cls: AssetClass; p: Portfolio; trades?: 
         )}
       </Card>
 
-      <ul className="stagger space-y-3" aria-label="Holdings">
+      <ul className={cx("stagger space-y-3", SCROLL_LIST)} aria-label="Holdings">
         {holdings.map((h) => <HoldingRow key={h.asset.id} h={h} />)}
       </ul>
 
@@ -386,7 +412,7 @@ export function AssetDialog({ open, onClose, initialClass = "stock" }: { open: b
           <Field label="Type"><Select value={cls} onChange={(e) => setCls(e.target.value as AssetClass)}>{CLASSES.map((c) => <option key={c} value={c}>{CLASS_LABEL[c]}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Symbol / short name"><Input name="symbol" required maxLength={30} placeholder={units ? "e.g. ACME" : "e.g. GROWTH-SIP"} autoFocus /></Field>
-            <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}><CurrencyOptions current={me?.baseCurrency} /></Select></Field>
+            <Field label="Currency"><CurrencySelect name="currency" defaultValue={me?.baseCurrency ?? "THB"} current={me?.baseCurrency} /></Field>
           </div>
           <Field label="Name"><Input name="name" required maxLength={100} placeholder={units ? "e.g. Acme Corporation" : "e.g. Example Growth Fund"} /></Field>
           {choice && (

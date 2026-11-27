@@ -7,7 +7,7 @@ import { formatMoney, toMinor } from "@/lib/money";
 import { TransferDialog } from "./transfer-dialog";
 import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, Select, cx } from "./ui";
 import { useConfirm } from "./feedback";
-import { CurrencyOptions } from "./currency-options";
+import { CurrencySelect } from "./currency-options";
 
 const TYPES: AccountType[] = ["cash", "bank", "wallet", "card", "loan", "investment"];
 const refresh = (qc: import("@tanstack/react-query").QueryClient) => qc.invalidateQueries({ queryKey: qk.accounts });
@@ -71,7 +71,7 @@ export function AccountsView() {
         <form onSubmit={submit} className="space-y-3">
           <Field label="Name"><Input name="name" required maxLength={60} autoFocus /></Field>
           <Field label="Type"><Select value={type} onChange={(e) => setType(e.target.value as AccountType)}>{TYPES.map((t) => <option key={t} value={t} className="capitalize">{t}</option>)}</Select></Field>
-          <Field label="Currency"><Select name="currency" defaultValue={me?.baseCurrency ?? "THB"}><CurrencyOptions current={me?.baseCurrency} names /></Select></Field>
+          <Field label="Currency"><CurrencySelect name="currency" defaultValue={me?.baseCurrency ?? "THB"} current={me?.baseCurrency} names /></Field>
           <Field label="Opening balance"><Input name="opening" type="number" step="0.01" defaultValue="0" /></Field>
           {error && <ErrorNote error={new Error(error)} />}
           <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" loading={create.isPending}>Add</Button></div>

@@ -29,5 +29,10 @@ export function typesFor(a: AssetLike): { value: TradeType; label: string }[] {
   return [{ value: "contribution", label: "Buy" }, { value: "withdrawal", label: "Sell" }, { value: "dividend", label: "Dividend" }, { value: "fee", label: "Fee" }];
 }
 export const entryLabel = (type: TradeType, a: AssetLike) => (amountOnlyTrade(a) && type === "contribution" ? "Buy" : amountOnlyTrade(a) && type === "withdrawal" ? "Sell" : TYPE_LABEL[type]);
+/**
+ * How an entry reads in a list of records: +1 adds to the investment or earns from it (buy, contribution, dividend),
+ * −1 takes money out of it (sell, withdrawal, fee), 0 is neither (a bonus costs nothing).
+ */
+export const entrySign = (t: TradeType): 1 | -1 | 0 => (t === "bonus" ? 0 : t === "sell" || t === "withdrawal" || t === "fee" ? -1 : 1);
 /** Money flowing back to the investor is shown positive. */
 export const isInflow = (t: TradeType) => t === "sell" || t === "dividend" || t === "withdrawal";

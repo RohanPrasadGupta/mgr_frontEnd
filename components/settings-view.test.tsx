@@ -2,7 +2,7 @@ import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { baseRoutes } from "@/test/fixtures";
-import { errorResponse, mockFetch, renderWithClient } from "@/test/utils";
+import { errorResponse, mockFetch, renderWithClient, selectOption, valueOf } from "@/test/utils";
 import { SettingsView } from "./settings-view";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
@@ -17,7 +17,7 @@ describe("SettingsView", () => {
     renderWithClient(<SettingsView />);
     expect(await ready()).toHaveValue("Me");
     expect(screen.getByLabelText("Email")).toBeDisabled();
-    expect(screen.getByLabelText(/Base currency/)).toHaveValue("THB");
+    expect(valueOf(screen.getByLabelText(/Base currency/))).toBe("THB");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("Name"), "x");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
@@ -29,7 +29,7 @@ describe("SettingsView", () => {
     await ready();
     await userEvent.clear(screen.getByLabelText("Name"));
     await userEvent.type(screen.getByLabelText("Name"), "New Name");
-    await userEvent.selectOptions(screen.getByLabelText("Week starts on"), "0");
+    await selectOption(screen.getByLabelText("Week starts on"), "0");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
     expect(m.last("PATCH", "/me")!.body).toEqual({ name: "New Name", baseCurrency: "THB", timezone: "Asia/Bangkok", weekStart: 0 });
@@ -39,7 +39,7 @@ describe("SettingsView", () => {
     const m = mockFetch({ ...baseRoutes, "PATCH /me": { data: {} } });
     renderWithClient(<SettingsView />);
     await ready();
-    await userEvent.selectOptions(await screen.findByLabelText(/Base currency/), "NPR");
+    await selectOption(await screen.findByLabelText(/Base currency/), "NPR");
     expect(screen.getByRole("alert")).toHaveTextContent(/does not convert your existing transactions/);
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     const dlg = await screen.findByRole("dialog", { name: "Change base currency?" });

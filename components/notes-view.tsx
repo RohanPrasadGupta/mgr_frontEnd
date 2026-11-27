@@ -7,7 +7,7 @@ import { invalidateNotes, useMutate, useNotes } from "@/lib/api/hooks";
 import type { Note } from "@/lib/api/types";
 import { useConfirm } from "./feedback";
 import { RowActions } from "./row-actions";
-import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, cx } from "./ui";
+import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, cx, Textarea } from "./ui";
 
 const when = (iso: string) => new Date(iso).toLocaleString("en", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -71,8 +71,7 @@ function NoteDialog({ state, onClose }: { state: Note | "new" | null; onClose: (
       <form key={edit?.id ?? "new"} onSubmit={submit} className="space-y-3">
         <Field label="Title"><Input name="title" required maxLength={120} defaultValue={edit?.title} autoFocus /></Field>
         <Field label="Note">
-          <textarea name="body" rows={8} maxLength={20_000} defaultValue={edit?.body}
-            className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-[var(--ring)]" />
+          <Textarea name="body" rows={8} maxLength={20_000} defaultValue={edit?.body} />
         </Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="pinned" defaultChecked={edit?.pinned} className="size-4 accent-[var(--primary)]" />Pin to the top</label>
         {error && <ErrorNote error={new Error(error)} />}

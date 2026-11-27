@@ -1,15 +1,16 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { T0, accounts, baseRoutes, me, npr } from "@/test/fixtures";
-import { errorResponse, mockFetch, renderWithClient } from "@/test/utils";
+import { errorResponse, mockFetch, optionsOf, renderWithClient, selectOption, valueOf } from "@/test/utils";
 import type { Transaction } from "@/lib/api/types";
 import { TransactionForm } from "./transaction-form";
 
 const routes = (extra: Record<string, unknown> = {}) => ({ ...baseRoutes, "POST /transactions": { data: { id: "t1" } }, ...extra });
 const tx = (o: Partial<Transaction> = {}): Transaction => ({ ...T0, id: "t9", accountId: "a-cash", categoryId: "c-food", kind: "expense", amountMinor: 12_345, currency: "THB", fxRate: 1, baseAmountMinor: 12_345, occurredAt: "2025-08-26T06:30:00.000Z", occurredOn: "2025-08-26", note: "lunch", transferGroupId: null, recurringId: null, ...o });
-async function open(ui: React.ReactElement, ready: () => Promise<unknown> = () => screen.findByRole("option", { name: /Cash \(THB\)/ })) { const r = renderWithClient(ui); await ready(); return r; }
-const categoriesLoaded = () => screen.findByRole("option", { name: /Food/ });
+const accountsLoaded = () => waitFor(() => expect(screen.getByRole("combobox", { name: /^Account/ })).toHaveTextContent(/Cash \(THB\)/));
+async function open(ui: React.ReactElement, ready: () => Promise<unknown> = accountsLoaded) { const r = renderWithClient(ui); await ready(); return r; }
+const categoriesLoaded = () => waitFor(() => expect(screen.getByRole("combobox", { name: "Category" })).toHaveTextContent(/Food/));
 
 describe("TransactionForm — add", () => {
   it("posts an expense in minor units with the chosen category and a client id", async () => {
@@ -17,7 +18,7 @@ describe("TransactionForm — add", () => {
     const onClose = vi.fn();
     await open(<TransactionForm open onClose={onClose} />);
     await userEvent.type(screen.getByLabelText(/^Amount/), "123.45");
-    await userEvent.selectOptions(screen.getByLabelText("Category"), "c-food");
+    await selectOption(screen.getByLabelText("Category"), "c-food");
     await userEvent.type(screen.getByLabelText("Note"), "pad thai");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -41,18 +42,20 @@ describe("TransactionForm — add", () => {
     mockFetch(routes());
     await open(<TransactionForm open onClose={vi.fn()} />);
     const cat = screen.getByLabelText("Category");
-    expect(within(cat).queryByRole("option", { name: /Food/ })).toBeInTheDocument();
-    expect(within(cat).queryByRole("option", { name: /Salary/ })).not.toBeInTheDocument();
+    let names = await optionsOf(cat);
+    expect(names.some((n) => /Food/.test(n))).toBe(true);
+    expect(names.some((n) => /Salary/.test(n))).toBe(false);
     await userEvent.click(screen.getByRole("radio", { name: "Income" }));
-    expect(within(cat).queryByRole("option", { name: /Salary/ })).toBeInTheDocument();
-    expect(within(cat).queryByRole("option", { name: /Food/ })).not.toBeInTheDocument();
+    names = await optionsOf(screen.getByLabelText("Category"));
+    expect(names.some((n) => /Salary/.test(n))).toBe(true);
+    expect(names.some((n) => /Food/.test(n))).toBe(false);
   });
 
   it("asks for an FX rate only for accounts outside the base currency, and sends it", async () => {
     const m = mockFetch(routes());
     await open(<TransactionForm open onClose={vi.fn()} />);
     expect(screen.queryByLabelText(/Exchange rate/)).not.toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText("Account"), npr.id);
+    await selectOption(screen.getByLabelText("Account"), npr.id);
     const fx = await screen.findByLabelText(/Exchange rate NPR → THB/);
     await userEvent.type(fx, "0.25");
     await userEvent.type(screen.getByLabelText(/^Amount \(NPR\)/), "400");
@@ -88,7 +91,7 @@ describe("TransactionForm — edit", () => {
     await open(<TransactionForm open tx={tx()} onClose={onClose} />, categoriesLoaded);
     expect(screen.getByLabelText(/^Amount/)).toHaveValue(123.45);
     expect(screen.getByLabelText("Note")).toHaveValue("lunch");
-    expect(screen.getByLabelText("Account")).toHaveValue("a-cash"); // the account it's in, and it can change
+    expect(valueOf(screen.getByLabelText("Account"))).toBe("a-cash"); // the account it's in, and it can change
     await userEvent.clear(screen.getByLabelText(/^Amount/));
     await userEvent.type(screen.getByLabelText(/^Amount/), "200");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -107,7 +110,7 @@ describe("TransactionForm — edit", () => {
   it("moves a transaction to another account; into another currency the amount stays and a rate can be given", async () => {
     const m = mockFetch(routes({ "PATCH /transactions/t9": { data: {} } }));
     await open(<TransactionForm open tx={tx()} onClose={vi.fn()} />, categoriesLoaded);
-    await userEvent.selectOptions(screen.getByLabelText(/^Account/), "a-bank");
+    await selectOption(screen.getByLabelText(/^Account/), "a-bank");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("PATCH", "/transactions/t9")!.body).toMatchObject({ accountId: "a-bank", amountMinor: 12_345 }));
     expect(m.last("PATCH", "/transactions/t9")!.body).not.toHaveProperty("fxRate");
@@ -116,7 +119,7 @@ describe("TransactionForm — edit", () => {
   it("asks for the rate when an edit moves it into a foreign-currency account", async () => {
     const m = mockFetch(routes({ "PATCH /transactions/t9": { data: {} } }));
     await open(<TransactionForm open tx={tx()} onClose={vi.fn()} />, categoriesLoaded);
-    await userEvent.selectOptions(screen.getByLabelText(/^Account/), "a-npr");
+    await selectOption(screen.getByLabelText(/^Account/), "a-npr");
     expect(screen.getByText(/now in NPR/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Exchange rate|rate/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));

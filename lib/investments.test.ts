@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TYPES_FOR, defaultTracking, isInflow } from "./investments";
+import { TYPES_FOR, defaultTracking, entrySign, isInflow } from "./investments";
 
 describe("investments helpers", () => {
   it("tracks market instruments by units and pooled money by value (mirrors the API)", () => {
@@ -13,5 +13,13 @@ describe("investments helpers", () => {
   it("treats money back to the investor as inflow", () => {
     expect(["sell", "dividend", "withdrawal"].every((t) => isInflow(t as never))).toBe(true);
     expect(["buy", "contribution", "fee", "bonus"].some((t) => isInflow(t as never))).toBe(false);
+  });
+});
+
+describe("entrySign", () => {
+  it("money in or earned is +, money out is −, a bonus is neither", () => {
+    expect(["buy", "contribution", "dividend"].map((t) => entrySign(t as never))).toEqual([1, 1, 1]);
+    expect(["sell", "withdrawal", "fee"].map((t) => entrySign(t as never))).toEqual([-1, -1, -1]);
+    expect(entrySign("bonus")).toBe(0);
   });
 });

@@ -8,8 +8,8 @@ import { formatDate, todayIso } from "@/lib/dates";
 import { formatMoney, minorUnit, toMajor, toMinor } from "@/lib/money";
 import { useConfirm } from "./feedback";
 import { RowActions } from "./row-actions";
-import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Segmented, Select, Skeleton, cx } from "./ui";
-import { CurrencyOptions } from "./currency-options";
+import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Segmented, Skeleton, cx, SCROLL_LIST } from "./ui";
+import { CurrencySelect } from "./currency-options";
 
 const step = (c: string) => (minorUnit(c) === 0 ? "1" : "0.01");
 
@@ -49,7 +49,7 @@ export function DebtsView() {
         <Empty>{status === "settled" ? "No settled debts yet." : "No open debts. Lent money to a friend or borrowed some? Record it to keep track of repayments."}</Empty>
       ) : (
         <Card className="p-2">
-          <ul className="stagger divide-y divide-border">
+          <ul className={cx("stagger divide-y divide-border", SCROLL_LIST)}>
             {debts.data.map((d) => {
               const paidPct = Math.min(100, (d.paidMinor / d.principalMinor) * 100);
               return (
@@ -118,9 +118,7 @@ function DebtDialog({ state, onClose }: { state: Debt | "new" | null; onClose: (
         <div className="grid grid-cols-[1fr_6.5rem] gap-3">
           <Field label="Amount"><Input name="amount" type="number" min="0" step={step(cur)} required defaultValue={edit ? toMajor(edit.principalMinor, edit.currency) : ""} /></Field>
           <Field label="Currency">
-            <Select aria-label="Currency" value={cur} onChange={(e) => setCurrency(e.target.value)}>
-              <CurrencyOptions current={cur} />
-            </Select>
+            <CurrencySelect value={cur} onChange={(e) => setCurrency(e.target.value)} current={cur} />
           </Field>
         </div>
         {relabel && <p className="text-xs text-muted">The amounts stay as typed, now in {cur}{edit!.paidMinor > 0 ? " — repayments too" : ""}. No exchange rate is applied.</p>}

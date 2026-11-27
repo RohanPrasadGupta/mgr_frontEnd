@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { T0, baseRoutes, me } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption } from "@/test/utils";
 import { GetStarted } from "./get-started";
 import { PortfolioChart } from "./portfolio-chart";
 
@@ -69,7 +69,7 @@ describe("PortfolioChart", () => {
     renderWithClient(<PortfolioChart />);
     const pick = await screen.findByRole("combobox", { name: "Show in currency" });
     expect(m.urls("/investments/portfolio/history")[0]).not.toContain("currency=");
-    await userEvent.selectOptions(pick, "NPR");
+    await selectOption(pick, "NPR");
     await waitFor(() => expect(m.urls("/investments/portfolio/history").at(-1)).toContain("currency=NPR"));
     expect(await screen.findByText("NPR 180.00")).toBeInTheDocument();
   });

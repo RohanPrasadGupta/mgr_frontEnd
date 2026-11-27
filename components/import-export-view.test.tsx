@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { baseRoutes } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption } from "@/test/utils";
 import { ImportExportView } from "./import-export-view";
 
 const report = (o: object = {}) => ({ data: { dryRun: true, total: 2, imported: 2, duplicates: 0, invalid: [], createdAccounts: [], createdCategories: ["expense:Food"], approximateFxRows: 0, ...o } });
@@ -43,7 +43,7 @@ describe("Import transactions", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check/ }));
     await screen.findByText("Check result — nothing saved yet");
     expect(m.last("POST", "/imports/transactions")!.body.rows[0].date).toBe("2025-04-03");
-    await userEvent.selectOptions(screen.getByLabelText(/Dates written as text are/), "mdy");
+    await selectOption(screen.getByLabelText(/Dates written as text are/), "mdy");
     expect(screen.queryByText("Check result — nothing saved yet")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Check/ }));
     await waitFor(() => expect(m.calls.filter((c) => c.path === "/imports/transactions")).toHaveLength(2));
@@ -101,7 +101,7 @@ describe("Import investments", () => {
     const m = mockFetch({ ...baseRoutes, "POST /imports/investments": () => ({ data: { source: "sip-capital", dryRun: true, total: 2, imported: 2, duplicates: 0, invalid: [], createdAssets: ["fund:NIC"], positionErrors: [] } }) });
     renderWithClient(<ImportExportView />);
     await userEvent.click(screen.getByRole("radio", { name: "Import investments" }));
-    await userEvent.selectOptions(screen.getByLabelText("Collection"), "sip-capital");
+    await selectOption(screen.getByLabelText("Collection"), "sip-capital");
     await userEvent.upload(screen.getByLabelText("Choose a JSON file"), new File(['{"name":"Growth Fund","amount":5}\n{"name":"Growth Fund","amount":6}\n'], "sip.jsonl"));
     expect(await screen.findByText(/sip\.jsonl · 2 documents/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Check/ }));

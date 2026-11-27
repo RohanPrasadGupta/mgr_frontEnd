@@ -10,7 +10,7 @@ import { DeleteAccountCard } from "./delete-account";
 import { ChangePasswordCard } from "./change-password";
 import { Button, Card, ErrorNote, Field, Input, Segmented, Select, Skeleton } from "./ui";
 import { useConfirm } from "./feedback";
-import { CurrencyOptions } from "./currency-options";
+import { CurrencySelect } from "./currency-options";
 
 type Theme = "system" | "light" | "dark";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -78,13 +78,11 @@ export function SettingsView() {
           <Field label="Email"><Input value={me!.email} readOnly disabled /></Field>
           <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} /></Field>
           <Field label="Base currency" hint="Totals and charts are shown in this currency.">
-            <Select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)}>
-              <CurrencyOptions current={baseCurrency} names />
-            </Select>
+            <CurrencySelect value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value)} current={baseCurrency} names />
           </Field>
           {currencyChanged && <p role="alert" className="rounded-lg bg-warn/10 p-2 text-xs text-warn">Changing the base currency does not convert your existing transactions, so past totals will mix currencies.</p>}
           <Field label="Time zone" hint="Decides which day and month a transaction belongs to."><Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</Select></Field>
-          <Field label="Week starts on"><Select value={weekStart} onChange={(e) => setWeekStart(Number(e.target.value))}>{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</Select></Field>
+          <Field label="Week starts on"><Select value={String(weekStart)} onChange={(e) => setWeekStart(Number(e.target.value))}>{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</Select></Field>
           {err && <ErrorNote error={new Error(err)} />}
           {msg && <p role="status" className="text-sm text-income">{msg}</p>}
           <Button type="submit" disabled={!dirty} loading={save.isPending}>{save.isPending ? "Saving…" : "Save changes"}</Button>

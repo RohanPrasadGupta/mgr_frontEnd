@@ -209,9 +209,9 @@ function ImportTransactions() {
         <Card className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">{fileName} · {raw.length.toLocaleString()} rows</h2>
-            <label className="flex items-center gap-2 text-xs text-muted">Dates written as text are
-              <Select value={dmy ? "dmy" : "mdy"} onChange={(e) => { setDmy(e.target.value === "dmy"); setChecked(false); setReport(null); }} className="w-auto"><option value="dmy">Day/Month/Year</option><option value="mdy">Month/Day/Year</option></Select>
-            </label>
+            <div className="flex items-center gap-2 text-xs text-muted">Dates written as text are
+              <Select aria-label="Dates written as text are" value={dmy ? "dmy" : "mdy"} onChange={(e) => { setDmy(e.target.value === "dmy"); setChecked(false); setReport(null); }} className="w-auto"><option value="dmy">Day/Month/Year</option><option value="mdy">Month/Day/Year</option></Select>
+            </div>
           </div>
           <ul className="flex flex-wrap gap-2 text-xs">
             {(Object.keys(labels) as Field[]).map((f) => (

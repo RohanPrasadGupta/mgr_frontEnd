@@ -1,5 +1,9 @@
 "use client";
-import { useEffect, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { useContext, useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { DateInput, FieldCtx, Select } from "./form-controls";
+
+export { Select };
+export type { Choice, ValueChange } from "./form-controls";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -29,15 +33,26 @@ export const Spinner = ({ className }: { className?: string }) => (
 export const Card = ({ className, ...p }: React.HTMLAttributes<HTMLDivElement>) => <div {...p} className={cx("rounded-2xl border border-border bg-card p-4 shadow-sm transition-[box-shadow,border-color,opacity] duration-200", className)} />;
 
 const field = "w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-[var(--ring)]";
-export const Input = ({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) => <input {...p} className={cx(field, className)} />;
-export const Select = ({ className, ...p }: SelectHTMLAttributes<HTMLSelectElement>) => <select {...p} className={cx(field, className)} />;
+/** Text/number input; `type="date"` and `type="datetime-local"` become the themed MUI picker (same ISO value). */
+export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
+  const ctx = useContext(FieldCtx);
+  if (p.type === "date" || p.type === "datetime-local") return <DateInput {...p} type={p.type as "date" | "datetime-local"} className={className} />;
+  return <input id={ctx?.id} aria-describedby={ctx?.hintId} {...p} className={cx(field, className)} />;
+}
+export function Textarea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ctx = useContext(FieldCtx);
+  return <textarea id={ctx?.id} aria-describedby={ctx?.hintId} {...p} className={cx(field, "resize-y", className)} />;
+}
+/** A labelled form control. The control inside (Input, Select, Textarea) picks up the label through context. */
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const id = useId();
+  const ctx = { id, labelId: `${id}-label`, hintId: hint ? `${id}-hint` : undefined };
   return (
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-muted">{label}</span>
-      {children}
-      {hint && <span className="block text-xs text-muted">{hint}</span>}
-    </label>
+    <div className="block space-y-1">
+      <label htmlFor={id} id={ctx.labelId} className="block text-xs font-medium text-muted">{label}</label>
+      <FieldCtx.Provider value={ctx}>{children}</FieldCtx.Provider>
+      {hint && <span id={ctx.hintId} className="block text-xs text-muted">{hint}</span>}
+    </div>
   );
 }
 
@@ -64,9 +79,10 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   }, [open]);
   return (
     <dialog ref={ref} onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={title}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-0 text-fg shadow-xl">
+      className="m-auto w-[min(32rem,calc(100vw-2rem))] overflow-visible rounded-2xl border border-border bg-card p-0 text-fg shadow-xl">
+      {/* the body scrolls, not the dialog, so drop-down menus and calendars can hang over the dialog's edge */}
       {open && (
-        <div className="p-5">
+        <div className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">{title}</h2>
             <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted hover:bg-border/50">✕</button>
@@ -136,3 +152,6 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
+
+/** A long list of records keeps the page in place: it tops out at 600px and scrolls inside itself. */
+export const SCROLL_LIST = "max-h-[600px] overflow-y-auto pr-1";

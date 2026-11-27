@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import dayjs from "dayjs";
 import type { ReactElement } from "react";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import { FeedbackProvider } from "@/components/feedback";
 
 export function renderWithClient(ui: ReactElement) {
@@ -39,3 +41,51 @@ export function mockFetch(routes: Record<string, Handler | unknown>) {
 
 export const errorResponse = (status: number, code: string, message: string) =>
   new Response(JSON.stringify({ error: { code, message } }), { status, headers: { "content-type": "application/json" } });
+
+// ── MUI form controls (drop-downs and date pickers) ──
+
+/** Opens an MUI drop-down (the element `getByLabelText` / `getByRole("combobox")` returns) and picks the option with `value`. */
+export async function selectOption(combobox: HTMLElement, value: string) {
+  await userEvent.click(combobox);
+  // the list may still be loading: wait for the option while the menu is open
+  const option = await waitFor(() => {
+    const o = screen.getByRole("listbox").querySelector<HTMLElement>(`[data-value="${CSS.escape(value)}"]`);
+    if (!o) throw new Error(`No option with value "${value}" in ${combobox.getAttribute("aria-label") ?? combobox.textContent}`);
+    return o;
+  });
+  await userEvent.click(option);
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+}
+/** The texts of a drop-down's options (group headings left out); the menu is closed again afterwards. */
+export async function optionsOf(combobox: HTMLElement): Promise<string[]> {
+  await userEvent.click(combobox);
+  const listbox = await screen.findByRole("listbox");
+  const texts = [...listbox.querySelectorAll<HTMLElement>("[role=option]")].map((o) => o.textContent ?? "");
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  return texts;
+}
+/** The values of a drop-down's options; the menu is closed again afterwards. */
+export async function optionValuesOf(combobox: HTMLElement): Promise<string[]> {
+  await userEvent.click(combobox);
+  const listbox = await screen.findByRole("listbox");
+  const values = [...listbox.querySelectorAll<HTMLElement>("[role=option]")].map((o) => o.dataset.value ?? "");
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  return values;
+}
+/** A drop-down's current value (what a native <select> would report as `.value`). */
+export const valueOf = (combobox: HTMLElement) => combobox.parentElement!.querySelector<HTMLInputElement>("input.MuiSelect-nativeInput")!.value;
+
+/** Sets an MUI date (or date-time) field to an ISO value, the way typing a full date into it would. */
+export function setDate(field: HTMLElement, iso: string) {
+  const root = field.closest(".MuiPickersInputBase-root, .MuiFormControl-root") ?? field;
+  const hidden = root.querySelector<HTMLInputElement>("input.MuiPickersInputBase-input") ?? (field as HTMLInputElement);
+  const withTime = iso.includes("T");
+  fireEvent.change(hidden, { target: { value: dayjs(iso).format(withTime ? "MMM D, YYYY h:mm A" : "MMM D, YYYY") } });
+}
+/** The ISO value a date field posts with its form (its hidden `name` input). */
+export const dateValueOf = (field: HTMLElement) => {
+  const box = field.closest(".MuiFormControl-root")!.parentElement!;
+  return box.querySelector<HTMLInputElement>("input[type=hidden]")?.value ?? "";
+};

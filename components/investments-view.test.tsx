@@ -1,8 +1,17 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const xlsx = vi.hoisted(() => {
+  const sheets: { name: string; rows: unknown[]; header: string[] }[] = [];
+  return {
+    sheets, writeFile: vi.fn(),
+    utils: { book_new: () => ({}), json_to_sheet: (rows: unknown[], o: { header: string[] }) => ({ rows, header: o.header }), book_append_sheet: (_wb: unknown, ws: { rows: unknown[]; header: string[] }, name: string) => sheets.push({ name, ...ws }) },
+  };
+});
+vi.mock("xlsx", () => xlsx);
 import { baseRoutes } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption } from "@/test/utils";
 import { InvestmentsView } from "./investments-view";
 
 const asset = (id: string, symbol: string, o: object = {}) => ({ id, userId: "u1", symbol, name: `${symbol} Ltd`, class: "stock", currency: "NPR", tracking: "units", costMethod: "wavg", archived: false, createdAt: "2025-01-01T00:00:00.000Z", deletedAt: null, ...o });
@@ -51,11 +60,28 @@ describe("investments list", () => {
     expect(screen.getByRole("button", { name: /Stock capital/ })).toHaveTextContent("4 entries");
     const activity = await screen.findByRole("list", { name: "Recent activity" });
     expect(activity).toHaveTextContent(/Stock · SNLI · Buy 5/);
+    expect(activity).toHaveTextContent(/\+NPR\s?2,165/); // money put in reads +, in green
     await userEvent.click(screen.getByRole("tab", { name: "Stock" }));
     expect(window.location.search).toBe("?tab=stock");
     expect(screen.getByRole("button", { name: "+ Add stock" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Overview" }));
     expect(window.location.search).toBe("");
+  });
+
+  it("exports the open type's entries (read fresh per asset) to an Excel sheet", async () => {
+    xlsx.sheets.length = 0;
+    const t = (id: string, assetId: string, o: object = {}) => ({ id, userId: "u1", assetId, type: "buy", quantity: 1, priceMinor: 100, amountMinor: 100, feeMinor: 0, tradedOn: "2026-01-01", note: null, includeInAvg: true, clientId: null, createdAt: "2026-01-01T00:00:00.000Z", deletedAt: null, ...o });
+    const m = mockFetch({ ...baseRoutes, "GET /investments/portfolio": { data: portfolio }, "GET /investments/portfolio/history": { data: { baseCurrency: "THB", points: [] } },
+      "GET /investments/trades": ({ url }: { url: URL }) => ({ data: url.searchParams.get("assetId") === "a1" ? [t("1", "a1", { type: "sell", tradedOn: "2026-03-01" })] : url.searchParams.get("assetId") === "a2" ? [t("2", "a2")] : [] }) });
+    renderWithClient(<InvestmentsView />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Stock" }));
+    await userEvent.click(screen.getByRole("button", { name: "Export Stock entries to Excel" }));
+    await waitFor(() => expect(xlsx.writeFile).toHaveBeenCalled());
+    expect(m.urls("/investments/trades").filter((u) => u.includes("assetId="))).toHaveLength(2);
+    expect(xlsx.sheets).toHaveLength(1);
+    expect(xlsx.sheets[0]!.name).toBe("Stock");
+    expect((xlsx.sheets[0]!.rows as { Date: string; "Signed amount": number }[]).map((r) => [r.Date, r["Signed amount"]])).toEqual([["2026-01-01", 1], ["2026-03-01", -1]]);
+    expect(xlsx.writeFile.mock.calls[0]![1]).toMatch(/^moneymgr-investments-stock-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });
 
   it("a type with nothing recorded can be removed (its empty assets are deleted); one with entries can't", async () => {
@@ -89,7 +115,7 @@ describe("investments list", () => {
     await u.click(await screen.findByRole("button", { name: "+ Add asset" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("radiogroup", { name: "How do you record it?" })).toBeNull(); // stocks: units and price
-    await u.selectOptions(within(dialog).getByLabelText("Type"), "crypto");
+    await selectOption(within(dialog).getByLabelText("Type"), "crypto");
     expect(within(dialog).getByRole("radio", { name: /Amount only/ })).toBeChecked();
     await u.type(within(dialog).getByLabelText("Symbol / short name"), "btc");
     await u.type(within(dialog).getByLabelText("Name"), "Bitcoin");

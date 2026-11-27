@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption, valueOf } from "@/test/utils";
 import { AssetView } from "./asset-view";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -89,8 +89,7 @@ describe("asset trades", () => {
     renderWithClient(<AssetView />);
     const u = userEvent.setup();
     const select = await screen.findByLabelText("Currency");
-    await waitFor(() => expect(within(select).getAllByRole("option").length).toBeGreaterThan(1));
-    await u.selectOptions(select, "NPR");
+    await selectOption(select, "NPR");
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(/only changes the label/);
     await u.click(within(dialog).getByRole("button", { name: "Use NPR" }));
@@ -108,7 +107,7 @@ describe("asset trades", () => {
     });
     renderWithClient(<AssetView />);
     const u = userEvent.setup();
-    expect(await screen.findByLabelText("Recorded by")).toHaveValue("value");
+    expect(valueOf(await screen.findByLabelText("Recorded by"))).toBe("value");
     await u.click(screen.getByRole("button", { name: "+ Add trade" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getAllByRole("radio").map((r) => r.parentElement!.textContent)).toEqual(["Buy", "Sell", "Dividend", "Fee"]);
@@ -126,7 +125,7 @@ describe("asset trades", () => {
     await u.click(within(again).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("POST", "/investments/trades")!.body).toMatchObject({ type: "contribution", amountMinor: 80_000, quantity: 0.004 }));
 
-    await u.selectOptions(screen.getByLabelText("Recorded by"), "units");
+    await selectOption(screen.getByLabelText("Recorded by"), "units");
     await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ tracking: "units" }));
   });
 
@@ -140,8 +139,7 @@ describe("asset trades", () => {
     const u = userEvent.setup();
     await u.click(await screen.findByRole("button", { name: "Add conversion" }));
     const showIn = screen.getByLabelText("Show in");
-    await waitFor(() => expect(within(showIn).getAllByRole("option").length).toBeGreaterThan(2));
-    await u.selectOptions(showIn, "NPR");
+    await selectOption(showIn, "NPR");
     await u.type(screen.getByLabelText(/^Rate in NPR per THB/), "4.18");
     await u.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("PATCH", `/investments/assets/${ID}`)!.body).toEqual({ convertCurrency: "NPR", convertRate: 4.18 }));

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Debt, Goal, Note, Report } from "@/lib/api/types";
 import { baseRoutes } from "@/test/fixtures";
-import { mockFetch, renderWithClient } from "@/test/utils";
+import { mockFetch, renderWithClient, selectOption } from "@/test/utils";
 import { DebtsView } from "./debts-view";
 import { GoalsView } from "./goals-view";
 import { NotesView } from "./notes-view";
@@ -105,7 +105,7 @@ describe("DebtsView", () => {
     const dlg = screen.getByRole("dialog", { name: "Edit debt" });
     const pick = within(dlg).getByRole("combobox", { name: "Currency" });
     expect(pick).toBeEnabled();
-    await userEvent.selectOptions(pick, "NPR");
+    await selectOption(pick, "NPR");
     expect(dlg).toHaveTextContent("now in NPR — repayments too");
     await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("PATCH", "/debts/d1")!.body).toMatchObject({ currency: "NPR", principalMinor: 70_000 }));
