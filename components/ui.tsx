@@ -71,6 +71,9 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
 
 export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Closes on a click on the backdrop only when the press started there too. Opening a drop-down puts its menu under
+  // the pointer between press and release, and the browser then reports that click on the dialog itself.
+  const pressedOutside = useRef(false);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -78,7 +81,11 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={title}
+    <dialog ref={ref} onClose={onClose} aria-label={title}
+      onPointerDown={(e) => { pressedOutside.current = e.target === ref.current; }}
+      onClick={(e) => { if (e.target === ref.current && pressedOutside.current) onClose(); pressedOutside.current = false; }}
+      // Escape closes an open menu or calendar first, not the whole form
+      onCancel={(e) => { if (ref.current?.querySelector(".MuiPopover-root, .MuiPopper-root, .MuiPickersLayout-root")) e.preventDefault(); }}
       className="m-auto w-[min(32rem,calc(100vw-2rem))] overflow-visible rounded-2xl border border-border bg-card p-0 text-fg shadow-xl">
       {/* the body scrolls, not the dialog, so drop-down menus and calendars can hang over the dialog's edge */}
       {open && (
