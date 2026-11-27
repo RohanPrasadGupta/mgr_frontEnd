@@ -1,8 +1,9 @@
 "use client";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 import { useState } from "react";
 import { call, client } from "@/lib/api/client";
 import { invalidateGoals, useAccounts, useGoal, useGoals, useMe, useMutate } from "@/lib/api/hooks";
-import type { Goal } from "@/lib/api/types";
+import type { Goal, GoalContribution } from "@/lib/api/types";
 import { formatDate, todayIso } from "@/lib/dates";
 import { formatMoney, minorUnit, toMajor, toMinor } from "@/lib/money";
 import { useConfirm } from "./feedback";
@@ -23,8 +24,8 @@ export function GoalsView() {
   const goals = useGoals(archived === "archived");
   const confirm = useConfirm();
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
-  const [adding, setAdding] = useState<Goal | null>(null);
-  const [detail, setDetail] = useState<string | null>(null);
+  const [adding, setAdding] = useState<{ goal: Goal; entry?: GoalContribution } | null>(null);
+  const [open, setOpen] = useState<string | null>(null); // the goal whose history is expanded
   const patch = useMutate(({ id, archived: a }: { id: string; archived: boolean }) => call(client.PATCH("/goals/{id}", { params: { path: { id } }, body: { archived: a } })), invalidateGoals, archived === "active" ? "Goal archived" : "Goal restored");
   const remove = useMutate((id: string) => call(client.DELETE("/goals/{id}", { params: { path: { id } } })), invalidateGoals, "Goal deleted");
 
@@ -40,16 +41,17 @@ export function GoalsView() {
       {goals.isPending ? <CardsSkeleton count={3} /> : goals.error ? <ErrorNote error={goals.error} retry={() => goals.refetch()} /> : goals.data.length === 0 ? (
         <Empty>{archived === "active" ? "No goals yet. Saving for a trip, a laptop or an emergency fund? Add a goal and track it here." : "No archived goals."}</Empty>
       ) : (
-        <div className="stagger grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="stagger grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
           {goals.data.map((g) => {
             const pct = Math.min(100, g.pct);
             return (
               <Card key={g.id} className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
-                  <button type="button" onClick={() => setDetail(g.id)} className="min-w-0 text-left">
+                  <div className="min-w-0">
                     <div className="truncate text-base font-semibold">{g.icon ? `${g.icon} ` : ""}{g.name}</div>
                     <div className="text-xs text-muted">{g.targetDate ? `By ${formatDate(g.targetDate)}` : "No target date"} · {g.source === "account" ? "tracks an account" : "manual savings"}</div>
-                  </button>
+                    {g.note && <div className="truncate text-xs text-muted">{g.note}</div>}
+                  </div>
                   <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", STATUS[g.status].cls)}>{STATUS[g.status].label}</span>
                 </div>
                 <div>
@@ -61,21 +63,23 @@ export function GoalsView() {
                 </div>
                 {g.monthlyNeededMinor !== null && <p className="text-xs text-muted">Save about <strong className="text-fg">{formatMoney(g.monthlyNeededMinor, g.currency)}</strong> a month to make it on time.</p>}
                 <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2">
-                  {g.source === "contributions" && !g.archived ? <Button variant="ghost" onClick={() => setAdding(g)}>+ Add money</Button> : <span className="text-xs text-muted">{g.archived ? "Archived" : "Updates with the account balance"}</span>}
+                  {g.source === "contributions" && !g.archived ? <Button variant="ghost" onClick={() => setAdding({ goal: g })}>+ Add money</Button> : <span className="text-xs text-muted">{g.archived ? "Archived" : "Updates with the account balance"}</span>}
                   <span className="flex items-center">
                     <button type="button" onClick={() => patch.mutate({ id: g.id, archived: !g.archived })} className="px-1 text-xs text-muted underline hover:text-fg">{g.archived ? "Restore" : "Archive"}</button>
                     <RowActions label={`goal ${g.name}`} onEdit={() => setEditing(g)}
                       onDelete={async () => { if (await confirm({ title: "Delete goal?", message: `Delete "${g.name}" and its saved-money history? Linked accounts are not affected.`, destructive: true })) remove.mutate(g.id); }} />
                   </span>
                 </div>
+                {g.source === "contributions" && (
+                  <GoalHistory goal={g} open={open === g.id} onToggle={() => setOpen(open === g.id ? null : g.id)} onEdit={(entry) => setAdding({ goal: g, entry })} />
+                )}
               </Card>
             );
           })}
         </div>
       )}
       <GoalDialog state={editing} onClose={() => setEditing(null)} />
-      <ContributionDialog goal={adding} onClose={() => setAdding(null)} />
-      <GoalDetail id={detail} onClose={() => setDetail(null)} />
+      <ContributionDialog state={adding} onClose={() => setAdding(null)} />
     </div>
   );
 }
@@ -129,53 +133,69 @@ function GoalDialog({ state, onClose }: { state: Goal | "new" | null; onClose: (
   );
 }
 
-function ContributionDialog({ goal, onClose }: { goal: Goal | null; onClose: () => void }) {
-  const [dir, setDir] = useState<"add" | "withdraw">("add");
+function ContributionDialog({ state, onClose }: { state: { goal: Goal; entry?: GoalContribution } | null; onClose: () => void }) {
+  const goal = state?.goal ?? null;
+  const entry = state?.entry;
+  const [dir, setDir] = useState<"add" | "withdraw" | null>(null); // null = from the entry (or "add")
+  const direction = dir ?? (entry && entry.amountMinor < 0 ? "withdraw" : "add");
   const [error, setError] = useState<string | null>(null);
   const save = useMutate((f: FormData) => {
     const minor = toMinor(Number(f.get("amount")), goal!.currency);
     if (!(minor > 0)) throw new Error("Enter an amount greater than 0");
-    return call(client.POST("/goals/{id}/contributions", { params: { path: { id: goal!.id } }, body: { amountMinor: dir === "add" ? minor : -minor, occurredOn: String(f.get("date")) || undefined, note: String(f.get("note") || "").trim() || undefined } }));
-  }, invalidateGoals, dir === "add" ? "Saved toward your goal" : "Withdrawal recorded");
+    const amountMinor = direction === "add" ? minor : -minor;
+    const note = String(f.get("note") || "").trim();
+    const date = String(f.get("date") || "");
+    if (entry) return call(client.PATCH("/goals/{id}/contributions/{contributionId}", { params: { path: { id: goal!.id, contributionId: entry.id } }, body: { amountMinor, note: note || null, ...(date ? { occurredOn: date } : {}) } }));
+    return call(client.POST("/goals/{id}/contributions", { params: { path: { id: goal!.id } }, body: { amountMinor, occurredOn: date || undefined, note: note || undefined } }));
+  }, invalidateGoals, entry ? "Entry updated" : direction === "add" ? "Saved toward your goal" : "Withdrawal recorded");
+  const close = () => { onClose(); setDir(null); setError(null); };
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(null);
-    try { await save.mutateAsync(new FormData(e.currentTarget)); onClose(); setDir("add"); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
+    try { await save.mutateAsync(new FormData(e.currentTarget)); close(); } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
   return (
-    <Modal open={!!goal} onClose={onClose} title={goal ? `Money for ${goal.name}` : ""}>
+    <Modal open={!!goal} onClose={close} title={goal ? `${entry ? "Edit entry" : "Money"} · ${goal.name}` : ""}>
       {goal && (
-        <form key={goal.id} onSubmit={submit} className="space-y-3">
-          <Segmented value={dir} onChange={setDir} options={[{ value: "add", label: "Add", tone: "income" }, { value: "withdraw", label: "Take out", tone: "expense" }]} />
-          <Field label={`Amount (${goal.currency})`}><Input name="amount" type="number" min="0" step={step(goal.currency)} required autoFocus /></Field>
-          <Field label="Date"><Input name="date" type="date" defaultValue={todayIso()} /></Field>
-          <Field label="Note"><Input name="note" maxLength={300} placeholder="Optional" /></Field>
+        <form key={entry?.id ?? goal.id} onSubmit={submit} className="space-y-3">
+          <Segmented value={direction} onChange={setDir} options={[{ value: "add", label: "Add", tone: "income" }, { value: "withdraw", label: "Take out", tone: "expense" }]} />
+          <Field label={`Amount (${goal.currency})`}><Input name="amount" type="number" min="0" step={step(goal.currency)} required autoFocus defaultValue={entry ? toMajor(Math.abs(entry.amountMinor), goal.currency) : ""} /></Field>
+          <Field label="Date"><Input name="date" type="date" defaultValue={entry?.occurredOn ?? todayIso()} /></Field>
+          <Field label="Note"><Input name="note" maxLength={300} placeholder="Optional" defaultValue={entry?.note ?? ""} /></Field>
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>Save</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={close}>Cancel</Button><Button type="submit" loading={save.isPending}>Save</Button></div>
         </form>
       )}
     </Modal>
   );
 }
 
-function GoalDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const goal = useGoal(id);
+/** The goal's money in and out, folded into its card; each entry can be edited or deleted in place. */
+function GoalHistory({ goal, open, onToggle, onEdit }: { goal: Goal; open: boolean; onToggle: () => void; onEdit: (entry: GoalContribution) => void }) {
+  const detail = useGoal(open ? goal.id : null);
   const confirm = useConfirm();
-  const del = useMutate((cid: string) => call(client.DELETE("/goals/{id}/contributions/{contributionId}", { params: { path: { id: id!, contributionId: cid } } })), invalidateGoals, "Entry deleted");
-  const g = goal.data?.goal;
+  const goalId = goal.id; // from the card, never from dialog state that may have closed
+  const del = useMutate((cid: string) => call(client.DELETE("/goals/{id}/contributions/{contributionId}", { params: { path: { id: goalId, contributionId: cid } } })), invalidateGoals, "Entry deleted");
+  const panel = `goal-history-${goal.id}`;
   return (
-    <Modal open={!!id} onClose={onClose} title={g?.name ?? "Goal"}>
-      {goal.isPending ? <Skeleton className="h-32" /> : goal.error ? <ErrorNote error={goal.error} retry={() => goal.refetch()} /> : g && (
-        <div className="space-y-3">
-          <p className="text-sm">{formatMoney(g.savedMinor, g.currency)} of {formatMoney(g.targetMinor, g.currency)} · {g.pct.toFixed(0)}%{g.note ? ` · ${g.note}` : ""}</p>
-          {g.source === "account" ? <p className="text-sm text-muted">This goal follows an account&apos;s balance, so there is no manual history.</p>
-            : goal.data.contributions.length === 0 ? <Empty>No money added yet.</Empty> : (
-              <ul className="max-h-80 divide-y divide-border overflow-y-auto">
-                {goal.data.contributions.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+    <div className="-mx-1 border-t border-border pt-1">
+      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panel} className="flex w-full items-center justify-between rounded-md px-1 py-1 text-xs font-medium text-muted hover:text-fg">
+        <span>History{detail.data ? ` (${detail.data.contributions.length})` : ""}</span>
+        <ExpandMore fontSize="small" className={cx("transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div id={panel} className="px-1 pb-1">
+          {detail.isPending ? <Skeleton className="h-16" /> : detail.error ? <ErrorNote error={detail.error} retry={() => detail.refetch()} />
+            : detail.data.contributions.length === 0 ? <p className="py-2 text-xs text-muted">No money added yet.</p> : (
+              <ul className="max-h-72 divide-y divide-border overflow-y-auto">
+                {detail.data.contributions.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
                     <span className="min-w-0"><span className="block">{formatDate(c.occurredOn)}</span>{c.note && <span className="block truncate text-xs text-muted">{c.note}</span>}</span>
                     <span className="flex items-center gap-1">
-                      <span className={cx("font-semibold tabular-nums", c.amountMinor < 0 ? "text-expense" : "text-income")}>{c.amountMinor > 0 ? "+" : "−"}{formatMoney(Math.abs(c.amountMinor), g.currency)}</span>
-                      <RowActions label="entry" onDelete={async () => { if (await confirm({ message: "Delete this entry?", destructive: true })) del.mutate(c.id); }} />
+                      <span className={cx("font-semibold tabular-nums", c.amountMinor < 0 ? "text-expense" : "text-income")}>{c.amountMinor > 0 ? "+" : "−"}{formatMoney(Math.abs(c.amountMinor), goal.currency)}</span>
+                      {!goal.archived && (
+                        <RowActions label={`entry of ${formatDate(c.occurredOn)}`} onEdit={() => onEdit(c)}
+                          onDelete={async () => { if (await confirm({ title: "Delete entry?", message: `Delete the ${formatMoney(Math.abs(c.amountMinor), goal.currency)} entry of ${formatDate(c.occurredOn)}?`, destructive: true })) del.mutate(c.id); }} />
+                      )}
                     </span>
                   </li>
                 ))}
@@ -183,6 +203,6 @@ function GoalDetail({ id, onClose }: { id: string | null; onClose: () => void })
             )}
         </div>
       )}
-    </Modal>
+    </div>
   );
 }

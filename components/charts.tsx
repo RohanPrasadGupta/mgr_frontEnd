@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { areaPath, compact, gaugeAngle, labelStep, linePath, niceRange, niceScale, ticksFor, type Slice } from "@/lib/chart-utils";
+import { areaPath, compact, gaugeAngle, labelStep, niceRange, niceScale, smoothPath, ticksFor, type Slice } from "@/lib/chart-utils";
 import { cx } from "./ui";
 
 /**
@@ -126,7 +126,7 @@ export function LineChart({ labels, series, format, axis, ariaLabel, height = 22
         {series.map((s) => {
           const pts = s.values.map((v, i) => [x(i), y(v)] as [number, number]);
           // keyed by the values so a new month/year redraws the line instead of snapping
-          return <g key={`${s.name}:${s.values.join(",")}`}>{s.stroke === "area" && <path d={areaPath(pts, y(0))} className={cx("chart-area", s.className.replace("stroke-", "fill-"), "opacity-15")} />}<path d={linePath(pts)} pathLength={1} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className={cx("chart-line", s.className)} /></g>;
+          return <g key={`${s.name}:${s.values.join(",")}`}>{s.stroke === "area" && <path d={areaPath(pts, y(0))} className={cx("chart-area", s.className.replace("stroke-", "fill-"), "opacity-15")} />}<path d={smoothPath(pts)} pathLength={1} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className={cx("chart-line", s.className)} /></g>;
         })}
         {active !== null && <line x1={x(active)} x2={x(active)} y1={M.top} y2={M.top + plotH} className="stroke-muted" strokeDasharray="3 3" />}
         {active !== null && series.map((s) => <circle key={s.name} cx={x(active)} cy={y(s.values[active]!)} r={4} className={cx(s.className.replace("stroke-", "fill-"), "stroke-card")} strokeWidth={2} />)}

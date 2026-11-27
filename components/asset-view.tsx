@@ -8,7 +8,7 @@ import { invalidateInvestments, useAssetPrices, useAssetTrades, useHolding, useM
 import type { Body, CostMethod, Holding, Trade, TradeType } from "@/lib/api/types";
 import { CLASS_LABEL, amountOnlyTrade, defaultTracking, entryLabel, isInflow, typesFor } from "@/lib/investments";
 import { formatMoney, formatPct, formatQty, formatUnitPrice, minorUnit, pad, toMajor, toMinor } from "@/lib/money";
-import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, cx } from "./ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, ListSkeleton, Modal, PageSkeleton, Select, Switch, cx } from "./ui";
 import { useConfirm } from "./feedback";
 import { CurrencyOptions } from "./currency-options";
 
@@ -273,16 +273,6 @@ function TradeDialog({ open, holding, trade, onClose }: { open: boolean; holding
         <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
       </form>
     </Modal>
-  );
-}
-
-/** On/off switch (role="switch"), used for "use for average price". */
-function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} title={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50", checked ? "bg-primary" : "bg-border")}>
-      <span className={cx("inline-block size-4 rounded-full bg-card shadow transition", checked ? "translate-x-4.5" : "translate-x-0.5")} />
-    </button>
   );
 }
 

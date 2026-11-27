@@ -5,12 +5,19 @@ import { invalidateBudgets, useBudgetStatus, useCategories, useMutate } from "@/
 import type { Body, BudgetPeriod, BudgetStatusItem } from "@/lib/api/types";
 import { budgetDate, formatMoney, pad, toMajor, toMinor } from "@/lib/money";
 import { MonthPicker } from "./month-picker";
-import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Select, cx } from "./ui";
+import { Button, Card, CardsSkeleton, Empty, ErrorNote, Field, Input, Modal, Select, Switch, cx } from "./ui";
 import { useConfirm } from "./feedback";
 
 const PERIOD: Record<BudgetPeriod, string> = { month: "Monthly", week: "Weekly", custom: "Custom range" };
 const stateStyle = { ok: "bg-income", warning: "bg-warn", over: "bg-expense" } as const;
 const stateText = { ok: "On track", warning: "Close to limit", over: "Over budget" } as const;
+const EVERY: Partial<Record<BudgetPeriod, string>> = { month: "Repeat every month", week: "Repeat every week" };
+/** Last day a one-off (non-repeating) budget covers: the end of its first month, or 6 days after a weekly start. */
+function oneOffEnd(period: BudgetPeriod, startOn: string): string {
+  const [y, m, d] = startOn.split("-").map(Number) as [number, number, number];
+  const end = period === "month" ? new Date(Date.UTC(y, m, 0)) : new Date(Date.UTC(y, m - 1, d + 6));
+  return end.toISOString().slice(0, 10);
+}
 const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export function BudgetsView() {
@@ -41,7 +48,7 @@ export function BudgetsView() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate font-medium">{b.categoryName ?? "All expenses"}</div>
-                  <div className="text-xs text-muted">{PERIOD[b.period]} · {short(b.window.from)} – {short(b.window.to)}</div>
+                  <div className="text-xs text-muted">{PERIOD[b.period]} · {short(b.window.from)} – {short(b.window.to)}{b.period !== "custom" && (b.endOn ? ` · ends ${short(b.endOn)}` : " · repeats")}</div>
                 </div>
                 <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-xs font-medium", b.state === "ok" ? "bg-income/15 text-income" : b.state === "warning" ? "bg-warn/15 text-warn" : "bg-expense/15 text-expense")}>{stateText[b.state]}</span>
               </div>
@@ -70,9 +77,13 @@ function BudgetDialog({ state, base, onClose }: { state: { edit?: BudgetStatusIt
   const edit = state?.edit;
   const categories = useCategories();
   const [period, setPeriod] = useState<BudgetPeriod>("month");
+  const [repeatPick, setRepeat] = useState<boolean | null>(null); // null = untouched (new: on; edit: as saved)
+  const repeat = repeatPick ?? (edit ? !edit.endOn : true);
+  const shownPeriod = edit?.period ?? period;
   const [error, setError] = useState<string | null>(null);
   const save = useMutate(({ id, body }: { id: string; body: Body<"/budgets/{id}", "patch"> } | { id?: undefined; body: Body<"/budgets", "post"> }) => (id ? call(client.PATCH("/budgets/{id}", { params: { path: { id } }, body: body as Body<"/budgets/{id}", "patch"> })) : call(client.POST("/budgets", { body: body as Body<"/budgets", "post"> }))), invalidateBudgets, "Budget saved");
 
+  const close = () => { onClose(); setRepeat(null); setError(null); };
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -81,19 +92,24 @@ function BudgetDialog({ state, base, onClose }: { state: { edit?: BudgetStatusIt
     const alertThresholdPct = Number(f.get("threshold") || 80);
     if (!(amountMinor > 0)) return setError("Enter an amount greater than 0");
     try {
-      if (edit) await save.mutateAsync({ id: edit.id, body: { amountMinor, alertThresholdPct } });
-      else {
+      if (edit) {
+        // switching "repeat" off stops it after the period on screen; back on clears the end
+        const endOn = edit.period === "custom" || repeat === !edit.endOn ? undefined : repeat ? null : edit.window.to;
+        await save.mutateAsync({ id: edit.id, body: { amountMinor, alertThresholdPct, ...(endOn !== undefined ? { endOn } : {}) } });
+      } else {
         const p = (f.get("period") as BudgetPeriod) ?? period;
-        await save.mutateAsync({ body: { categoryId: String(f.get("category") || "") || undefined, period: p, amountMinor, alertThresholdPct, startOn: String(f.get("startOn") || "") || undefined, endOn: String(f.get("endOn") || "") || undefined } });
+        const startOn = String(f.get("startOn") || "") || undefined;
+        const endOn = p === "custom" ? String(f.get("endOn") || "") || undefined : repeat ? undefined : oneOffEnd(p, startOn ?? todayStr);
+        await save.mutateAsync({ body: { categoryId: String(f.get("category") || "") || undefined, period: p, amountMinor, alertThresholdPct, startOn, endOn } });
       }
-      onClose();
+      close();
     } catch (err) { setError(err instanceof Error ? err.message : "Failed"); }
   }
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 
   return (
-    <Modal open={open} onClose={onClose} title={edit ? "Edit budget" : "Add budget"}>
+    <Modal open={open} onClose={close} title={edit ? "Edit budget" : "Add budget"}>
       {open && (
         <form key={edit?.id ?? "new"} onSubmit={submit} className="space-y-3">
           {!edit && (
@@ -107,8 +123,17 @@ function BudgetDialog({ state, base, onClose }: { state: { edit?: BudgetStatusIt
           )}
           <Field label={`Limit (${base})`}><Input name="amount" type="number" step="0.01" min="0" required defaultValue={edit ? toMajor(edit.amountMinor, base) : ""} autoFocus /></Field>
           <Field label="Warn me at (% used)"><Input name="threshold" type="number" min="1" max="100" defaultValue={edit?.alertThresholdPct ?? 80} /></Field>
+          {EVERY[shownPeriod] && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+              <span className="min-w-0">
+                <span className="block text-sm">{EVERY[shownPeriod]}</span>
+                <span className="block text-xs text-muted">{repeat ? "Carries on by itself until you switch it off or delete it." : edit ? `Stops after ${short(edit.endOn && !repeatPick ? edit.endOn : edit.window.to)}.` : `Only for the ${shownPeriod === "month" ? "month" : "week"} it starts in.`}</span>
+              </span>
+              <Switch checked={repeat} onChange={setRepeat} label={EVERY[shownPeriod]!} />
+            </div>
+          )}
           {error && <ErrorNote error={new Error(error)} />}
-          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
+          <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={close}>Cancel</Button><Button type="submit" loading={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button></div>
         </form>
       )}
     </Modal>

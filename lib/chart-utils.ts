@@ -43,7 +43,27 @@ export function toSlices(items: { label: string; value: number }[], colors: stri
 
 /** SVG path for a polyline through points (x,y), skipping nothing. */
 export const linePath = (pts: [number, number][]) => pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-export const areaPath = (pts: [number, number][], baseY: number) => pts.length ? `${linePath(pts)} L${pts[pts.length - 1]![0].toFixed(1)} ${baseY} L${pts[0]![0].toFixed(1)} ${baseY} Z` : "";
+/**
+ * A smooth line through every point (monotone cubic, Fritsch–Carlson): it curves between points but never
+ * overshoots them, so a flat stretch stays flat and a line never dips past a value that wasn't there.
+ */
+export function smoothPath(pts: [number, number][]): string {
+  const n = pts.length;
+  if (n < 3) return linePath(pts);
+  const f = (v: number) => v.toFixed(1);
+  const dx: number[] = [], m: number[] = [];
+  for (let i = 0; i < n - 1; i++) { dx.push(pts[i + 1]![0] - pts[i]![0]); m.push((pts[i + 1]![1] - pts[i]![1]) / (dx[i] || 1)); }
+  const t: number[] = [m[0]!];
+  for (let i = 1; i < n - 1; i++) t.push(m[i - 1]! * m[i]! <= 0 ? 0 : (3 * (dx[i - 1]! + dx[i]!)) / ((2 * dx[i]! + dx[i - 1]!) / m[i - 1]! + (dx[i]! + 2 * dx[i - 1]!) / m[i]!));
+  t.push(m[n - 2]!);
+  let d = `M${f(pts[0]![0])} ${f(pts[0]![1])}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = pts[i]!, [x1, y1] = pts[i + 1]!, h = dx[i]! / 3;
+    d += ` C${f(x0 + h)} ${f(y0 + t[i]! * h)} ${f(x1 - h)} ${f(y1 - t[i + 1]! * h)} ${f(x1)} ${f(y1)}`;
+  }
+  return d;
+}
+export const areaPath = (pts: [number, number][], baseY: number) => pts.length ? `${smoothPath(pts)} L${pts[pts.length - 1]![0].toFixed(1)} ${baseY} L${pts[0]![0].toFixed(1)} ${baseY} Z` : "";
 
 /** Which x-axis labels to draw so they never overlap: every n-th label that fits `minGap` pixels apart. */
 export function labelStep(count: number, width: number, minGap = 36): number {

@@ -861,7 +861,8 @@ export interface paths {
         delete: operations["deleteGoalContribution"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Edit a contribution */
+        patch: operations["updateGoalContribution"];
         trace?: never;
     };
     "/debts": {
@@ -949,7 +950,8 @@ export interface paths {
         delete: operations["deleteDebtPayment"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Edit a repayment (still no more than the amount owed) */
+        patch: operations["updateDebtPayment"];
         trace?: never;
     };
     "/notes": {
@@ -1997,6 +1999,7 @@ export interface components {
         };
         PortfolioHistory: {
             baseCurrency: string;
+            currency: string;
             /** Format: date */
             asOf: string;
             points: {
@@ -4100,6 +4103,8 @@ export interface operations {
         parameters: {
             query?: {
                 months?: number;
+                all?: "true" | "false";
+                currency?: string;
             };
             header?: never;
             path?: never;
@@ -5084,6 +5089,48 @@ export interface operations {
             };
         };
     };
+    updateGoalContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                contributionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    amountMinor?: number;
+                    occurredOn?: string;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GoalContribution"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listDebts: {
         parameters: {
             query?: {
@@ -5268,6 +5315,7 @@ export interface operations {
                 "application/json": {
                     counterparty?: string;
                     principalMinor?: number;
+                    currency?: string;
                     dueOn?: string | null;
                     note?: string | null;
                 };
@@ -5355,6 +5403,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateDebtPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                paymentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    amountMinor?: number;
+                    paidOn?: string;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DebtPayment"];
+                    };
+                };
             };
             /** @description Error */
             default: {

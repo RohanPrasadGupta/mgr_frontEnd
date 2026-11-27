@@ -130,5 +130,9 @@ export const useFxQuote = (from?: string, to?: string, date?: string) =>
   });
 
 /** Portfolio value and invested amount at each month end (replayed from trades + manual prices, base currency). */
-export const usePortfolioHistory = (months: number) =>
-  useQuery({ ...keep, queryKey: ["investments", "history", { months }] as const, staleTime: 60_000, queryFn: async () => (await call(client.GET("/investments/portfolio/history", { params: { query: { months } } }))).data });
+/** `months: "all"` = from the first entry to today; `currency` omitted = the base currency. */
+export const usePortfolioHistory = (months: number | "all", currency?: string) =>
+  useQuery({
+    ...keep, queryKey: ["investments", "history", { months, currency: currency ?? null }] as const, staleTime: 60_000,
+    queryFn: async () => (await call(client.GET("/investments/portfolio/history", { params: { query: months === "all" ? { all: "true", currency } : { months, currency } } }))).data,
+  });

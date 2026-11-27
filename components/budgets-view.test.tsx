@@ -55,6 +55,36 @@ describe("BudgetsView", () => {
     expect(m.last("POST", "/budgets")!.body).toMatchObject({ categoryId: "c-food", period: "month", amountMinor: 100_000, alertThresholdPct: 90 });
   });
 
+  it("repeats by default; switched off, a new monthly budget ends with its first month", async () => {
+    const m = mockFetch(routes([], { "POST /budgets": { data: {} } }));
+    renderWithClient(<BudgetsView />);
+    await userEvent.click(await screen.findByRole("button", { name: "+ Add budget" }));
+    const sw = screen.getByRole("switch", { name: "Repeat every month" });
+    expect(sw).toHaveAttribute("aria-checked", "true");
+    await userEvent.type(screen.getByLabelText(/^Starts/), "2026-02-10");
+    await userEvent.type(screen.getByLabelText(/^Limit/), "100");
+    await userEvent.click(sw);
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("POST", "/budgets")).toBeDefined());
+    expect(m.last("POST", "/budgets")!.body).toMatchObject({ period: "month", startOn: "2026-02-10", endOn: "2026-02-28" });
+  });
+
+  it("editing: switching repeat off stops it after the shown month; on again clears the end", async () => {
+    const m = mockFetch(routes([item({}), item({ id: "b2", categoryName: "Rent", endOn: "2026-11-30" })], { "PATCH /budgets/b1": { data: {} }, "PATCH /budgets/b2": { data: {} } }));
+    renderWithClient(<BudgetsView />);
+    expect(await screen.findByText(/· repeats/)).toBeInTheDocument();
+    expect(screen.getByText(/· ends Nov 30/)).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
+    await userEvent.click(screen.getByRole("switch", { name: "Repeat every month" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/budgets/b1")!.body).toMatchObject({ endOn: "2026-11-30" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]!);
+    expect(screen.getByRole("switch", { name: "Repeat every month" })).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(screen.getByRole("switch", { name: "Repeat every month" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/budgets/b2")!.body).toMatchObject({ endOn: null }));
+  });
+
   it("requires both dates for a custom range", async () => {
     mockFetch(routes([]));
     renderWithClient(<BudgetsView />);

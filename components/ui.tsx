@@ -125,3 +125,14 @@ export const ErrorNote = ({ error, retry }: { error: unknown; retry?: () => void
   </div>
 );
 export const Empty = ({ children }: { children: ReactNode }) => <div className="anim-fade rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">{children}</div>;
+
+/** On/off switch (role="switch"): "use for average price", "repeat every month"… */
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} title={label} disabled={disabled} onClick={() => onChange(!checked)}
+      className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition disabled:opacity-50", checked ? "bg-primary" : "bg-border")}>
+      <span className={cx("inline-block size-4 rounded-full bg-card shadow transition", checked ? "translate-x-4.5" : "translate-x-0.5")} />
+    </button>
+  );
+}
+

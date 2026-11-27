@@ -54,11 +54,24 @@ describe("PortfolioChart", () => {
     const m = mockFetch({ "GET /investments/portfolio/history": { data: { baseCurrency: "THB", asOf: "2026-11-25", approximate: true, excluded: [], points: [
       { date: "2026-09-30", valueMinor: 15_000, investedMinor: 15_000 }, { date: "2026-10-31", valueMinor: 17_000, investedMinor: 15_000 }, { date: "2026-11-25", valueMinor: 18_000, investedMinor: 15_000 }] } } });
     renderWithClient(<PortfolioChart />);
-    expect(await screen.findByRole("img", { name: /Portfolio value and invested amount, last 3 months/ })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /Portfolio value and invested amount in THB, last 3 months/ })).toBeInTheDocument();
     expect(screen.getByText("+THB 30.00 (+20.0%)")).toBeInTheDocument(); // gain over invested, not raw growth
     expect(m.urls("/investments/portfolio/history")[0]).toContain("months=12");
     await userEvent.click(screen.getByRole("radio", { name: "5Y" }));
     await waitFor(() => expect(m.urls("/investments/portfolio/history").at(-1)).toContain("months=60"));
+    await userEvent.click(screen.getByRole("radio", { name: "All" }));
+    await waitFor(() => expect(m.urls("/investments/portfolio/history").at(-1)).toContain("all=true"));
+  });
+  it("can show the chart in another of the user's currencies", async () => {
+    const hist = (currency: string) => ({ data: { baseCurrency: "THB", currency, asOf: "2026-11-25", approximate: true, excluded: [], points: [
+      { date: "2026-10-31", valueMinor: 15_000, investedMinor: 15_000 }, { date: "2026-11-25", valueMinor: 18_000, investedMinor: 15_000 }] } });
+    const m = mockFetch({ "GET /me": { data: { ...me, currencies: ["THB", "NPR"] } }, "GET /investments/portfolio/history": ({ url }: { url: URL }) => hist(url.searchParams.get("currency") ?? "THB") });
+    renderWithClient(<PortfolioChart />);
+    const pick = await screen.findByRole("combobox", { name: "Show in currency" });
+    expect(m.urls("/investments/portfolio/history")[0]).not.toContain("currency=");
+    await userEvent.selectOptions(pick, "NPR");
+    await waitFor(() => expect(m.urls("/investments/portfolio/history").at(-1)).toContain("currency=NPR"));
+    expect(await screen.findByText("NPR 180.00")).toBeInTheDocument();
   });
   it("explains an empty history instead of drawing a flat line", async () => {
     mockFetch({ "GET /investments/portfolio/history": { data: { baseCurrency: "THB", asOf: "2026-11-25", approximate: true, excluded: [], points: [] } } });

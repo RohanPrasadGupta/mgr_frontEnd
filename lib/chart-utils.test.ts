@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areaPath, compact, gaugeAngle, labelStep, linePath, niceRange, niceScale, ticksFor, toSlices } from "./chart-utils";
+import { areaPath, compact, gaugeAngle, labelStep, linePath, niceRange, niceScale, ticksFor, toSlices, smoothPath } from "./chart-utils";
 
 describe("niceScale", () => {
   it("rounds the axis up to friendly numbers", () => {
@@ -83,5 +83,16 @@ describe("paths and labels", () => {
     expect(gaugeAngle(50)).toBe(90);
     expect(gaugeAngle(150)).toBe(180);
     expect(gaugeAngle(-20)).toBe(0);
+  });
+});
+
+describe("smoothPath", () => {
+  it("curves through every point and keeps flat stretches flat", () => {
+    expect(smoothPath([[0, 10], [10, 20]])).toBe("M0.0 10.0 L10.0 20.0"); // two points: a straight line
+    const d = smoothPath([[0, 50], [10, 50], [20, 10], [30, 10]]);
+    expect(d.startsWith("M0.0 50.0 C")).toBe(true);
+    expect(d).toContain(" 10.0 50.0 C"); // passes through each point
+    // a flat segment's control points stay on the line: no bump above or below a value that wasn't there
+    expect(d.split(" C")[1]).toBe("3.3 50.0 6.7 50.0 10.0 50.0");
   });
 });

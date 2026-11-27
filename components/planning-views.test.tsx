@@ -35,11 +35,37 @@ describe("GoalsView", () => {
     await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("POST", "/goals")!.body).toMatchObject({ name: "Trip", targetMinor: 50_000 }));
     await userEvent.click(screen.getByRole("button", { name: "+ Add money" }));
-    const add = screen.getByRole("dialog", { name: "Money for Laptop" });
+    const add = screen.getByRole("dialog", { name: "Money · Laptop" });
     await userEvent.click(within(add).getByRole("radio", { name: "Take out" }));
     await userEvent.type(within(add).getByLabelText(/^Amount/), "50");
     await userEvent.click(within(add).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("POST", "/goals/g1/contributions")!.body).toMatchObject({ amountMinor: -5000 }));
+  });
+  it("folds the history into the card; each entry is edited or deleted in place", async () => {
+    const entry = (o = {}) => ({ id: "c1", goalId: "g1", amountMinor: -5000, occurredOn: "2026-02-01", note: "oops", createdAt: at, ...o });
+    const m = mockFetch({ ...baseRoutes, "GET /goals": { data: [goal()] }, "GET /goals/g1": { data: { goal: goal(), contributions: [entry(), entry({ id: "c2", amountMinor: 30_000, note: null })] } },
+      "PATCH /goals/g1/contributions/c1": { data: entry({ amountMinor: -2000 }) }, "DELETE /goals/g1/contributions/c2": null });
+    renderWithClient(<GoalsView />);
+    const toggle = await screen.findByRole("button", { name: /^History/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(toggle);
+    expect(await screen.findByText("oops")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^History \(2\)/ })).toHaveAttribute("aria-expanded", "true");
+
+    const edits = screen.getAllByRole("button", { name: /^Edit entry of/ });
+    await userEvent.click(edits[0]!);
+    const dlg = screen.getByRole("dialog", { name: "Edit entry · Laptop" });
+    expect(within(dlg).getByRole("radio", { name: "Take out" })).toBeChecked(); // a withdrawal stays a withdrawal
+    expect(within(dlg).getByLabelText(/^Amount/)).toHaveValue(50);
+    await userEvent.clear(within(dlg).getByLabelText(/^Amount/));
+    await userEvent.type(within(dlg).getByLabelText(/^Amount/), "20");
+    await userEvent.clear(within(dlg).getByLabelText("Note"));
+    await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/goals/g1/contributions/c1")!.body).toEqual({ amountMinor: -2000, occurredOn: "2026-02-01", note: null }));
+
+    await userEvent.click(screen.getAllByRole("button", { name: /^Delete entry of/ })[1]!);
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Delete entry?" })).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(m.last("DELETE", "/goals/g1/contributions/c2")).toBeDefined()); // the goal id comes from the card
   });
   it("deletes only after confirming", async () => {
     const m = mockFetch({ ...baseRoutes, "GET /goals": { data: [goal()] }, "DELETE /goals/g1": null });
@@ -71,6 +97,38 @@ describe("DebtsView", () => {
     expect(within(dlg).getByLabelText(/^Amount/)).toHaveValue(200);
     await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(m.last("POST", "/debts/d1/payments")!.body).toMatchObject({ amountMinor: 20_000 }));
+  });
+  it("edits a debt's currency (a relabel: the amount is sent in the new currency)", async () => {
+    const m = mockFetch({ ...baseRoutes, "GET /debts": { data: [debt()] }, "GET /debts/summary": { data: { totals: [], openCount: 1, overdueCount: 0 } }, "PATCH /debts/d1": { data: debt({ currency: "NPR" }) } });
+    renderWithClient(<DebtsView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit debt with Ronit" }));
+    const dlg = screen.getByRole("dialog", { name: "Edit debt" });
+    const pick = within(dlg).getByRole("combobox", { name: "Currency" });
+    expect(pick).toBeEnabled();
+    await userEvent.selectOptions(pick, "NPR");
+    expect(dlg).toHaveTextContent("now in NPR — repayments too");
+    await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/debts/d1")!.body).toMatchObject({ currency: "NPR", principalMinor: 70_000 }));
+  });
+  it("folds repayments under the debt; each one is edited (up to what is owed) or deleted in place", async () => {
+    const pay = { id: "p1", debtId: "d1", amountMinor: 50_000, paidOn: "2026-01-15", note: null, createdAt: at };
+    const m = mockFetch({ ...baseRoutes, "GET /debts": { data: [debt(), debt({ id: "d2", counterparty: "Milan", paidMinor: 0, outstandingMinor: 70_000, status: "open" })] }, "GET /debts/summary": { data: { totals: [], openCount: 2, overdueCount: 0 } },
+      "GET /debts/d1": { data: { debt: debt(), payments: [pay] } }, "PATCH /debts/d1/payments/p1": { data: { ...pay, amountMinor: 60_000 } }, "DELETE /debts/d1/payments/p1": null });
+    renderWithClient(<DebtsView />);
+    expect(await screen.findAllByRole("button", { name: /^Repayments/ })).toHaveLength(1); // nothing to show for Milan
+    await userEvent.click(screen.getByRole("button", { name: /^Repayments/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Edit repayment of/ }));
+    const dlg = screen.getByRole("dialog", { name: "Edit repayment · Ronit" });
+    const amount = within(dlg).getByLabelText(/^Amount/);
+    expect(amount).toHaveValue(500);
+    expect(amount).toHaveAttribute("max", "700"); // 200 still owed + this repayment's 500
+    await userEvent.clear(amount);
+    await userEvent.type(amount, "600");
+    await userEvent.click(within(dlg).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(m.last("PATCH", "/debts/d1/payments/p1")!.body).toEqual({ amountMinor: 60_000, paidOn: "2026-01-15", note: null }));
+    await userEvent.click(screen.getByRole("button", { name: /^Delete repayment of/ }));
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Delete repayment?" })).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(m.last("DELETE", "/debts/d1/payments/p1")).toBeDefined());
   });
 });
 
